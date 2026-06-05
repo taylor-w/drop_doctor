@@ -283,10 +283,10 @@ defmodule TrackConnWeb.DashboardLive do
                 <a href="/report" target="_blank" rel="noopener" class="btn btn-sm btn-primary">
                   <.lucide name="file-text" class="size-4" /> Open report (Save as PDF)
                 </a>
-                <a href="/report.csv" class="btn btn-sm btn-outline">
+                <a href="/report.csv" download class="btn btn-sm btn-outline">
                   <.lucide name="download" class="size-4" /> Download CSV
                 </a>
-                <a href="/spikes.csv" class="btn btn-sm btn-outline">
+                <a href="/spikes.csv" download class="btn btn-sm btn-outline">
                   <.lucide name="zap" class="size-4" /> Spike log{spike_count_badge(@spike_events)}
                 </a>
               </div>
