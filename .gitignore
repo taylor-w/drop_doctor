@@ -1,0 +1,55 @@
+# The directory Mix will write compiled artifacts to.
+/_build/
+
+# If you run "mix test --cover", coverage assets end up here.
+/cover/
+
+# The directory Mix downloads your dependencies sources to.
+/deps/
+
+# Where 3rd-party dependencies like ExDoc output generated docs.
+/doc/
+
+# Ignore .fetch files in case you like to edit your project deps locally.
+/.fetch
+
+# If the VM crashes, it generates a dump, let's ignore it too.
+erl_crash.dump
+
+# Also ignore archive artifacts (built via "mix archive.build").
+*.ez
+
+# Temporary files, for example, from tests.
+/tmp/
+
+# Ignore package tarball (built via "mix hex.build").
+track_conn-*.tar
+
+# Ignore assets that are produced by build tools.
+/priv/static/assets/
+
+# Ignore digested assets cache.
+/priv/static/cache_manifest.json
+
+# In case you use Node.js/npm, you want to ignore these.
+npm-debug.log
+/assets/node_modules/
+
+# Database files
+*.db
+*.db-*
+
+# Burrito-packaged binaries (built via "MIX_ENV=prod mix release").
+# These are release artifacts (tens of MB each); distribute them, don't commit.
+/burrito_out/
+
+# Local Claude Code / agent harness state (machine-specific, not project config).
+/.claude/
+
+# Digested static copies produced by "mix phx.digest" during prod asset builds
+# (hashed filenames + .gz). The originals stay tracked; these are build output.
+/priv/static/*-*.*
+/priv/static/**/*-*.*
+/priv/static/*.gz
+/priv/static/**/*.gz
+

@@ -1,0 +1,64 @@
+name: Release
+
+# Tag a commit to cut a release:
+#   git tag v0.1.0 && git push origin v0.1.0
+# This builds the four self-contained Burrito binaries (cross-compiled from
+# Linux via Zig) and attaches them to a GitHub Release for that tag.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # required to create the release and upload assets
+
+jobs:
+  build:
+    name: Build binaries & publish release
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Elixir/OTP
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          elixir-version: "1.18.2"
+
+      - name: Set up Zig (Burrito's cross-compiler)
+        uses: mlugg/setup-zig@v2
+        with:
+          version: "0.15.2"
+
+      - name: Install packaging tools
+        # xz: payload compression for every target.
+        # p7zip-full: provides `7z`, required to build the Windows target.
+        run: sudo apt-get update && sudo apt-get install -y xz-utils p7zip-full
+
+      - name: Cache deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-release-${{ hashFiles('mix.lock') }}
+          restore-keys: ${{ runner.os }}-release-
+
+      - name: Install dependencies
+        run: mix deps.get --only prod
+
+      - name: Build and digest assets
+        run: |
+          mix assets.setup
+          mix assets.deploy
+
+      - name: Build all Burrito targets
+        run: mix release
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: burrito_out/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
