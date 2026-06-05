@@ -21,7 +21,7 @@ if System.get_env("PHX_SERVER") do
 end
 
 config :track_conn, TrackConnWeb.Endpoint,
-  http: [port: String.to_integer(System.get_env("PORT", "4040"))]
+  http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
 if config_env() == :prod do
   # track_conn ships as a double-clickable Burrito binary, so prod must run with
@@ -73,7 +73,7 @@ if config_env() == :prod do
     server: true,
     url: [
       host: "localhost",
-      port: String.to_integer(System.get_env("PORT", "4040")),
+      port: String.to_integer(System.get_env("PORT", "4000")),
       scheme: "http"
     ],
     http: [

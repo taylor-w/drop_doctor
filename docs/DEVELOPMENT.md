@@ -16,13 +16,11 @@ binaries. For what the app does and how to *use* it, see the
 ```bash
 mix deps.get            # first time only
 mix ecto.migrate        # first time only — creates the SQLite history file
-PORT=4040 mix phx.server
+mix phx.server
 ```
 
-Then open **<http://localhost:4040>**.
-
-> Ports 4000 and 4010 are commonly taken by other local services, so this app
-> defaults to **4040**. Override anytime with the `PORT` env var.
+Then open **<http://localhost:4000>**. Set the `PORT` env var to use a different
+port (e.g. `PORT=4040 mix phx.server`).
 
 ### WSL users
 
@@ -32,7 +30,7 @@ shows a banner. For true "router vs. ISP" attribution, point it at your real
 router:
 
 ```bash
-ROUTER_IP=192.168.1.1 PORT=4040 mix phx.server
+ROUTER_IP=192.168.1.1 mix phx.server
 ```
 
 (Find your real router IP on Windows with `ipconfig` → "Default Gateway"; it's
@@ -117,7 +115,7 @@ committed). A Linux host can cross-build all of Linux/Windows/macOS; building
 ### What a packaged binary does at runtime
 
 On first launch it unpacks itself into a per-user cache and starts the server on
-**<http://localhost:4040>**, opening your browser automatically. It binds to
+**<http://localhost:4000>**, opening your browser automatically. It binds to
 **loopback only** (`127.0.0.1`) — a personal tool, not exposed to the network —
 and keeps its history database and a generated session key in a per-user data
 folder (never next to the binary):

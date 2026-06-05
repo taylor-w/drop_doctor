@@ -29,7 +29,7 @@ your browser opens to the dashboard. Nothing to install.
 | Linux (x86_64) | [`track_conn_linux`](https://github.com/taylor-w/track_conn/releases/latest/download/track_conn_linux) |
 
 All downloads are on the **[latest release page](https://github.com/taylor-w/track_conn/releases/latest)**.
-The app starts at **<http://localhost:4040>** and opens it for you. To quit, run
+The app starts at **<http://localhost:4000>** and opens it for you. To quit, run
 it from a terminal and press `Ctrl+C` twice, or end the process from your OS.
 
 > **Your computer may warn you the first time** — the downloads aren't yet
