@@ -8,11 +8,14 @@ defmodule TrackConnWeb.DashboardLive do
   """
   use TrackConnWeb, :live_view
 
-  alias TrackConn.{DeepDiagnostic, Measurements, Monitor, Net, Targets}
+  alias TrackConn.{DeepDiagnostic, Measurements, Monitor, Net, SpikeMonitor, Targets}
 
   @impl true
   def mount(_params, _session, socket) do
-    if connected?(socket), do: Monitor.subscribe()
+    if connected?(socket) do
+      Monitor.subscribe()
+      Phoenix.PubSub.subscribe(TrackConn.PubSub, SpikeMonitor.topic())
+    end
 
     # Load existing history once from the DB. Thereafter the LiveView updates
     # from broadcasts (appending the persisted row), so it never re-queries the
@@ -28,6 +31,7 @@ defmodule TrackConnWeb.DashboardLive do
      |> assign(:stats, stats(history))
      |> assign(:total_all, Measurements.count())
      |> assign(:expanded, nil)
+     |> assign(:stability, initial_stability())
      |> assign(:deep, %{status: :idle, target: Targets.internet_target()})
      |> assign(:mtr_available, DeepDiagnostic.available?())}
   end
@@ -45,6 +49,11 @@ defmodule TrackConnWeb.DashboardLive do
      |> assign(:total_all, total)}
   end
 
+  # Continuous stability stats for one segment (router/internet) arrive ~0.5/s.
+  def handle_info({:stability, key, stats}, socket) do
+    {:noreply, assign(socket, :stability, Map.put(socket.assigns.stability, key, stats))}
+  end
+
   @impl true
   def handle_event("sweep_now", _params, socket) do
     # Async: the verdict arrives via the {:sweep, ...} broadcast above.
@@ -53,7 +62,14 @@ defmodule TrackConnWeb.DashboardLive do
   end
 
   def handle_event("toggle_monitor", _params, socket) do
-    if socket.assigns.running, do: Monitor.pause(), else: Monitor.resume()
+    if socket.assigns.running do
+      Monitor.pause()
+      SpikeMonitor.pause_all()
+    else
+      Monitor.resume()
+      SpikeMonitor.resume_all()
+    end
+
     {:noreply, assign(socket, :running, Monitor.running?())}
   end
 
@@ -182,6 +198,14 @@ defmodule TrackConnWeb.DashboardLive do
                         {seg.summary}
                       </div>
                       <div class="text-xs opacity-50">{String.upcase(to_string(seg.state))}</div>
+                      <%= for line <- [stability_readout(@stability, seg)], line != nil do %>
+                        <div
+                          class="text-xs font-mono opacity-60 mt-0.5"
+                          title="Continuous sampling (~5×/sec) between the 5s checks. Jitter is RTT steadiness; p99 and spikes are brief lag bursts the smoothed verdict hides. These are what cause in-game stutter even when the average looks fine."
+                        >
+                          {line}
+                        </div>
+                      <% end %>
                     </div>
                   </div>
 
@@ -419,6 +443,39 @@ defmodule TrackConnWeb.DashboardLive do
   defp deep_zone_class(:isp), do: "badge-warning badge-outline"
   defp deep_zone_class(:destination), do: "badge-success"
   defp deep_zone_class(_), do: "badge-ghost"
+
+  # Pull current stats for each ping host; falls back to nil if the monitors
+  # aren't running (e.g. in tests, which set :start_monitor false).
+  defp initial_stability do
+    for key <- [:router, :internet], into: %{}, do: {key, safe_stats(key)}
+  end
+
+  defp safe_stats(key) do
+    SpikeMonitor.stats(key)
+  catch
+    :exit, _ -> nil
+  end
+
+  # The continuous jitter/spike line for a ping segment. Prefers the live
+  # high-rate stats; until the first burst lands (or if monitoring is off) it
+  # falls back to the per-sweep burst metrics. Returns nil for non-ping segments.
+  defp stability_readout(stability, %{key: key, metrics: metrics})
+       when key in [:router, :internet] do
+    case stability[key] do
+      %{sample_count: n} = st when n > 0 ->
+        "jitter #{fmt_ms(st.jitter_ms)} · p99 #{fmt_ms(st.p99_ms)} · spikes #{st.spike_count} · loss #{fmt_pct(st.loss_pct)}"
+
+      _ ->
+        if is_number(metrics[:jitter_ms]) or is_number(metrics[:max_rtt_ms]) do
+          "jitter #{fmt_ms(metrics[:jitter_ms])} · spike #{fmt_ms(metrics[:max_rtt_ms])}"
+        end
+    end
+  end
+
+  defp stability_readout(_stability, _seg), do: nil
+
+  defp fmt_pct(n) when is_number(n), do: "#{Float.round(n / 1, 1)}%"
+  defp fmt_pct(_), do: "—"
 
   defp fmt_ms(nil), do: "—"
   defp fmt_ms(n) when is_number(n), do: "#{Float.round(n / 1, 1)}ms"

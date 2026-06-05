@@ -75,6 +75,15 @@ Verdicts are **smoothed over the last few readings**, so a single blip can't
 flip the light — a real fault takes ~15–25s of sustained failure to confirm
 (and clears the same way).
 
+### Catching lag spikes (jitter & instability)
+
+That smoothing is right for "is my connection down?" but blind to the brief
+stutters that ruin a game or call — it averages them away. So alongside it,
+track_conn continuously samples your router and the open internet (~5×/second)
+and shows the **jitter, worst-case latency (p99), spike count, and brief packet
+loss** for each. That's how you catch an intermittent problem that looks perfectly
+fine "on average".
+
 ### Dig deeper, when it's the ISP
 
 When the verdict points at your ISP, **Run deep diagnostic** traces *every hop*

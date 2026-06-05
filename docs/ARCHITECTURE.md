@@ -21,6 +21,8 @@ lib/track_conn/
     mtr.ex               # per-hop trace via `mtr --json` (the deep diagnostic probe)
   sweeper.ex             # runs one ladder pass concurrently w/ a bounded deadline
   aggregate.ex           # median-smooths a rolling window (debounce / anti-false-alarm)
+  stability.ex           # pure stats: jitter (IPDV), p95/p99, spike + brief-loss counts
+  spike_monitor.ex       # continuous high-rate ping sampler — catches spikes between sweeps
   diagnosis.ex           # the brain: turns measurements into a plain-English verdict
   path_report.ex         # interprets an mtr trace (zones, phantom-loss, culprit hop)
   deep_diagnostic.ex     # orchestrates the on-demand per-hop trace + interpretation

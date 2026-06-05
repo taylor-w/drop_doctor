@@ -1,0 +1,65 @@
+defmodule TrackConn.StabilityTest do
+  use ExUnit.Case, async: true
+  alias TrackConn.Stability
+
+  defp oks(rtts), do: Enum.map(rtts, &{:ok, &1})
+
+  describe "summarize/1" do
+    test "empty buffer is all-nil / zero, not a crash" do
+      s = Stability.summarize([])
+      assert s.sample_count == 0
+      assert s.loss_pct == 0.0
+      assert s.jitter_ms == nil
+      assert s.spike_count == 0
+    end
+
+    test "steady low-latency stream: tiny jitter, no spikes" do
+      s = Stability.summarize(oks([12.0, 12.1, 11.9, 12.0, 12.2, 11.8]))
+      assert s.loss_pct == 0.0
+      assert s.spike_count == 0
+      assert s.jitter_ms < 1.0
+      assert s.max_rtt_ms == 12.2
+    end
+
+    test "a buried spike is caught even when the average looks fine" do
+      # one 180ms spike among otherwise-12ms samples — average barely moves,
+      # but the spike must be surfaced.
+      s = Stability.summarize(oks([12.0, 11.0, 13.0, 180.0, 12.0, 11.0, 12.0]))
+      assert s.spike_count == 1
+      assert s.max_rtt_ms == 180.0
+      # jitter jumps because of the big consecutive deltas around the spike
+      assert s.jitter_ms > 40.0
+    end
+
+    test "loss is counted from :loss samples" do
+      s = Stability.summarize(oks([12.0, 12.0]) ++ [:loss, :loss])
+      assert s.sample_count == 4
+      assert s.loss_pct == 50.0
+    end
+  end
+
+  describe "jitter/1 (IPDV)" do
+    test "needs at least two samples" do
+      assert Stability.jitter([12.0]) == nil
+    end
+
+    test "is the mean absolute consecutive delta" do
+      # deltas: |20-10|, |10-20| = 10, 10 -> mean 10.0
+      assert Stability.jitter([10.0, 20.0, 10.0]) == 10.0
+    end
+  end
+
+  describe "percentile/2" do
+    test "surfaces tail latency (nearest-rank)" do
+      # 98 steady samples + 2 bad ones at the very top of the distribution
+      rtts = List.duplicate(10.0, 98) ++ [400.0, 500.0]
+      assert Stability.percentile(rtts, 50) == 10.0
+      assert Stability.percentile(rtts, 99) == 400.0
+      assert Stability.percentile(rtts, 100) == 500.0
+    end
+
+    test "empty list is nil" do
+      assert Stability.percentile([], 95) == nil
+    end
+  end
+end

@@ -21,11 +21,16 @@ defmodule TrackConn.Application do
       TrackConnWeb.Endpoint
     ]
 
-    # The connection monitor runs probe sweeps on an interval. Disabled in
-    # tests (which inject fakes and start their own) via :start_monitor config.
+    # The connection monitor runs probe sweeps on an interval; the spike monitors
+    # continuously sample the router and open internet for jitter/spikes between
+    # sweeps. All disabled in tests (which inject fakes / would spawn real pings)
+    # via :start_monitor config.
     children =
       if Application.get_env(:track_conn, :start_monitor, true) do
-        List.insert_at(children, -2, TrackConn.Monitor)
+        children
+        |> List.insert_at(-2, TrackConn.Monitor)
+        |> List.insert_at(-2, spike_child(:router, TrackConn.Targets.router_target()))
+        |> List.insert_at(-2, spike_child(:internet, TrackConn.Targets.internet_target()))
       else
         children
       end
@@ -52,6 +57,13 @@ defmodule TrackConn.Application do
   def config_change(changed, _new, removed) do
     TrackConnWeb.Endpoint.config_change(changed, removed)
     :ok
+  end
+
+  # Two SpikeMonitors share one module, so each needs a distinct supervisor id.
+  defp spike_child(key, host) do
+    Supervisor.child_spec({TrackConn.SpikeMonitor, key: key, host: host},
+      id: {TrackConn.SpikeMonitor, key}
+    )
   end
 
   defp skip_migrations?() do
