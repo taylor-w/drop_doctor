@@ -14,8 +14,12 @@ defmodule TrackConn.Measurements.Sweep do
              :headline,
              :router_rtt_ms,
              :router_loss_pct,
+             :router_max_rtt_ms,
+             :router_jitter_ms,
              :internet_rtt_ms,
              :internet_loss_pct,
+             :internet_max_rtt_ms,
+             :internet_jitter_ms,
              :dns_ms,
              :web_ms,
              :verdict,
@@ -28,8 +32,12 @@ defmodule TrackConn.Measurements.Sweep do
     field :headline, :string
     field :router_rtt_ms, :float
     field :router_loss_pct, :float
+    field :router_max_rtt_ms, :float
+    field :router_jitter_ms, :float
     field :internet_rtt_ms, :float
     field :internet_loss_pct, :float
+    field :internet_max_rtt_ms, :float
+    field :internet_jitter_ms, :float
     field :dns_ms, :float
     field :web_ms, :float
     field :verdict, :map
@@ -43,8 +51,12 @@ defmodule TrackConn.Measurements.Sweep do
     :headline,
     :router_rtt_ms,
     :router_loss_pct,
+    :router_max_rtt_ms,
+    :router_jitter_ms,
     :internet_rtt_ms,
     :internet_loss_pct,
+    :internet_max_rtt_ms,
+    :internet_jitter_ms,
     :dns_ms,
     :web_ms,
     :verdict

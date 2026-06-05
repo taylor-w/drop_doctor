@@ -46,10 +46,17 @@ defmodule TrackConn.Aggregate do
   defp smooth_ping(latest, series) do
     loss = median(for s <- series, is_number(s[:loss_pct]), do: s.loss_pct)
     rtt = median(for s <- series, is_number(s[:rtt_ms]), do: s.rtt_ms)
+    # Spike + jitter are deliberately NOT median-smoothed — surfacing them is the
+    # whole point — so we keep the window's *worst* reading. The smoothed rtt/loss
+    # still drive the verdict; these ride alongside for the stability readout.
+    spike = max_of(for s <- series, is_number(s[:max_rtt_ms]), do: s.max_rtt_ms)
+    jitter = max_of(for s <- series, is_number(s[:jitter_ms]), do: s.jitter_ms)
 
     Map.merge(latest, %{
       loss_pct: loss || 100.0,
       rtt_ms: rtt,
+      max_rtt_ms: spike,
+      jitter_ms: jitter,
       ok?: (loss || 100.0) < 100.0
     })
   end
@@ -60,6 +67,9 @@ defmodule TrackConn.Aggregate do
     oks = Enum.count(series, & &1[:ok?])
     Map.merge(latest, %{ms: ms, ok?: oks * 2 >= length(series)})
   end
+
+  defp max_of([]), do: nil
+  defp max_of(nums), do: Enum.max(nums)
 
   @doc "Median of a list of numbers; nil for an empty list."
   def median([]), do: nil

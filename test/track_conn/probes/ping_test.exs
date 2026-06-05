@@ -20,6 +20,9 @@ defmodule TrackConn.Probes.PingTest do
       assert r.loss_pct == 0.0
       assert r.received == 3
       assert_in_delta r.rtt_ms, 11.971, 0.001
+      # spike (max) and jitter (mdev) are surfaced, not collapsed into the avg
+      assert_in_delta r.max_rtt_ms, 14.946, 0.001
+      assert_in_delta r.jitter_ms, 3.091, 0.001
     end
 
     test "Linux ping, partial loss" do
@@ -66,6 +69,9 @@ defmodule TrackConn.Probes.PingTest do
       assert r.loss_pct == 0.0
       assert r.received == 3
       assert_in_delta r.rtt_ms, 12.345, 0.001
+      # macOS labels the 4th field "stddev"; positionally it's still jitter
+      assert_in_delta r.max_rtt_ms, 13.500, 0.001
+      assert_in_delta r.jitter_ms, 0.900, 0.001
     end
 
     test "Windows ping" do
@@ -84,6 +90,9 @@ defmodule TrackConn.Probes.PingTest do
       assert r.loss_pct == 0.0
       assert r.received == 3
       assert_in_delta r.rtt_ms, 13.0, 0.001
+      # Windows reports Maximum but no jitter/stddev
+      assert_in_delta r.max_rtt_ms, 16.0, 0.001
+      assert r.jitter_ms == nil
     end
   end
 end

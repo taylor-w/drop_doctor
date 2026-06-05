@@ -107,7 +107,12 @@ defmodule TrackConn.Diagnosis do
   defp ping_state(_, _), do: {:down, "no response"}
 
   defp metrics(key, r) when key in [:router, :internet],
-    do: %{rtt_ms: r[:rtt_ms], loss_pct: r[:loss_pct]}
+    do: %{
+      rtt_ms: r[:rtt_ms],
+      loss_pct: r[:loss_pct],
+      max_rtt_ms: r[:max_rtt_ms],
+      jitter_ms: r[:jitter_ms]
+    }
 
   defp metrics(:dns, r), do: %{ms: r[:ms], address: r[:address]}
   defp metrics(:web, r), do: %{ms: r[:ms], status: r[:status], bytes: r[:bytes]}

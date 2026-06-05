@@ -25,8 +25,12 @@ defmodule TrackConn.Measurements do
       headline: verdict.headline,
       router_rtt_ms: router[:rtt_ms],
       router_loss_pct: router[:loss_pct],
+      router_max_rtt_ms: router[:max_rtt_ms],
+      router_jitter_ms: router[:jitter_ms],
       internet_rtt_ms: internet[:rtt_ms],
       internet_loss_pct: internet[:loss_pct],
+      internet_max_rtt_ms: internet[:max_rtt_ms],
+      internet_jitter_ms: internet[:jitter_ms],
       dns_ms: dns[:ms],
       web_ms: web[:ms],
       verdict: jsonable(verdict)

@@ -10,14 +10,20 @@ defmodule TrackConn.Probes.Ping do
   Returns a map:
 
       %{
-        ok?: boolean,        # did at least one packet come back?
-        rtt_ms: float | nil, # average round-trip time
-        loss_pct: float,     # packet loss percentage (0.0 - 100.0)
+        ok?: boolean,           # did at least one packet come back?
+        rtt_ms: float | nil,    # average round-trip time
+        max_rtt_ms: float | nil, # worst single round-trip (the latency spike)
+        jitter_ms: float | nil, # mean deviation of RTT (mdev/stddev); nil on Windows
+        loss_pct: float,        # packet loss percentage (0.0 - 100.0)
         sent: integer,
         received: integer,
-        raw: String.t(),     # raw command output, for the "show me the proof" view
+        raw: String.t(),        # raw command output, for the "show me the proof" view
         error: String.t() | nil
       }
+
+  `max_rtt_ms` and `jitter_ms` are the spike/jitter signals a gamer cares about:
+  `ping` already prints them (`min/avg/max/mdev`), we just surface them instead of
+  collapsing everything to the average.
   """
 
   @behaviour TrackConn.Probe
@@ -58,6 +64,74 @@ defmodule TrackConn.Probes.Ping do
   end
 
   @doc """
+  Runs one high-rate burst of pings and returns the *per-packet* round-trip
+  times (plus sent/received for loss). This is what `TrackConn.SpikeMonitor`
+  calls back-to-back for continuous sampling — unlike `run/2`, which collapses a
+  burst to its average.
+
+  `interval` spacing is sub-second on Linux/macOS; Windows can't do sub-second
+  intervals unprivileged, so there it sends `count` packets at its ~1s default.
+
+  Returns `%{times: [float], sent: integer, received: integer, raw: String.t()}`.
+  """
+  def burst(host, opts \\ []) do
+    count = Keyword.get(opts, :count, 10)
+    interval = Keyword.get(opts, :interval, 0.2)
+    timeout = Keyword.get(opts, :timeout, 1)
+
+    try do
+      {cmd, args} = burst_command(host, count, interval, timeout)
+
+      case System.cmd(cmd, args, stderr_to_stdout: true) do
+        {out, _exit} ->
+          loss = parse_loss(out)
+
+          %{
+            times: packet_times(out),
+            sent: count,
+            received: parse_received(out, count, loss),
+            raw: String.trim(out)
+          }
+
+        _ ->
+          burst_failure(count)
+      end
+    rescue
+      e -> burst_failure(count, Exception.message(e))
+    end
+  end
+
+  defp burst_command(host, count, interval, timeout) do
+    case :os.type() do
+      {:win32, _} ->
+        # No sub-second interval on Windows; -n sends `count` at the default ~1s.
+        {"ping", ["-n", to_string(count), "-w", to_string(timeout * 1000), host]}
+
+      {:unix, :darwin} ->
+        total = max(1, round(interval * count) + timeout)
+
+        {"ping",
+         ["-c", to_string(count), "-i", to_string(interval), "-t", to_string(total), host]}
+
+      {:unix, _} ->
+        {"ping",
+         ["-c", to_string(count), "-i", to_string(interval), "-W", to_string(timeout), host]}
+    end
+  end
+
+  # Each reply line carries the per-packet time: "time=14.9 ms" (Unix) or
+  # "time=13ms" / "time<1ms" (Windows). Scan them all out of one burst.
+  defp packet_times(out) do
+    ~r/time[=<]\s*([\d.]+)\s*ms/i
+    |> Regex.scan(out)
+    |> Enum.map(fn [_, t] -> parse_float(t) end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp burst_failure(count, raw \\ "ping failed"),
+    do: %{times: [], sent: count, received: 0, raw: raw}
+
+  @doc """
   Parses raw `ping` output into the result map. Public so the cross-platform
   parsing — the most fragile part — can be regression-tested against real
   output captured on each OS.
@@ -70,6 +144,8 @@ defmodule TrackConn.Probes.Ping do
     %{
       ok?: received > 0,
       rtt_ms: rtt,
+      max_rtt_ms: parse_max(out),
+      jitter_ms: parse_jitter(out),
       loss_pct: loss,
       sent: count,
       received: received,
@@ -97,6 +173,25 @@ defmodule TrackConn.Probes.Ping do
     end
   end
 
+  # Worst round-trip — the spike. Linux/mac: 3rd field of "min/avg/max/mdev".
+  # Windows: "Maximum = 16ms".
+  defp parse_max(out) do
+    cond do
+      m = Regex.run(~r/=\s*[\d.]+\/[\d.]+\/([\d.]+)\//, out) -> parse_float(Enum.at(m, 1))
+      m = Regex.run(~r/Maximum\s*=\s*([\d.]+)\s*ms/i, out) -> parse_float(Enum.at(m, 1))
+      true -> nil
+    end
+  end
+
+  # Jitter = ping's mean deviation (mdev/stddev), the 4th field of the rtt line.
+  # Windows `ping` doesn't report it, so jitter is nil there.
+  defp parse_jitter(out) do
+    case Regex.run(~r/=\s*[\d.]+\/[\d.]+\/[\d.]+\/([\d.]+)\s*ms/, out) do
+      [_, mdev] -> parse_float(mdev)
+      _ -> nil
+    end
+  end
+
   defp parse_received(out, count, loss) do
     cond do
       # Linux: "3 received" ; mac: "3 packets received"
@@ -113,7 +208,17 @@ defmodule TrackConn.Probes.Ping do
   end
 
   defp failure(count, msg \\ "ping failed") do
-    %{ok?: false, rtt_ms: nil, loss_pct: 100.0, sent: count, received: 0, raw: msg, error: msg}
+    %{
+      ok?: false,
+      rtt_ms: nil,
+      max_rtt_ms: nil,
+      jitter_ms: nil,
+      loss_pct: 100.0,
+      sent: count,
+      received: 0,
+      raw: msg,
+      error: msg
+    }
   end
 
   defp parse_float(str) do
