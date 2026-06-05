@@ -21,6 +21,7 @@ defmodule TrackConnWeb.Router do
 
     get "/report", ReportController, :show
     get "/report.csv", ReportController, :csv
+    get "/spikes.csv", ReportController, :spikes_csv
   end
 
   # Other scopes may use custom stacks.

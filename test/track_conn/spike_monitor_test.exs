@@ -13,7 +13,12 @@ defmodule TrackConn.SpikeMonitorTest do
   setup do
     start_supervised!(
       {SpikeMonitor,
-       key: :test, host: "127.0.0.1", count: 3, interval: 0.2, burst_fun: &fake_burst/2}
+       key: :test,
+       host: "127.0.0.1",
+       count: 3,
+       interval: 0.2,
+       persist: false,
+       burst_fun: &fake_burst/2}
     )
 
     :ok

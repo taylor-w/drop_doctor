@@ -102,6 +102,9 @@ dashboard's **Save proof for your ISP** card gives you:
   can do this.
 - **A CSV timeline** — one timestamped row per measurement, so a technician can
   see exactly *when* the connection broke and for how long.
+- **A spike log (CSV)** — every brief latency spike and packet-loss burst caught
+  by continuous sampling, each timestamped — proof of the *intermittent* problems
+  an "average" hides. The printable report includes a summary of these too.
 
 ---
 

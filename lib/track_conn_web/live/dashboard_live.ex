@@ -32,6 +32,7 @@ defmodule TrackConnWeb.DashboardLive do
      |> assign(:total_all, Measurements.count())
      |> assign(:expanded, nil)
      |> assign(:stability, initial_stability())
+     |> assign(:spike_events, Measurements.count_spike_events())
      |> assign(:deep, %{status: :idle, target: Targets.internet_target()})
      |> assign(:mtr_available, DeepDiagnostic.available?())}
   end
@@ -46,7 +47,8 @@ defmodule TrackConnWeb.DashboardLive do
      |> assign(:verdict, verdict)
      |> assign(:history, history)
      |> assign(:stats, stats(history))
-     |> assign(:total_all, total)}
+     |> assign(:total_all, total)
+     |> assign(:spike_events, Measurements.count_spike_events())}
   end
 
   # Continuous stability stats for one segment (router/internet) arrive ~0.5/s.
@@ -274,7 +276,8 @@ defmodule TrackConnWeb.DashboardLive do
             <div class="card-body flex-row items-center justify-between flex-wrap gap-3">
               <p class="text-sm opacity-70 max-w-md">
                 Hand a support rep something concrete: a timestamped report with the verdict, the
-                per-segment evidence, and your latest deep trace — plus the raw timeline as a spreadsheet.
+                per-segment evidence, and your latest deep trace — plus the raw timeline and a log of
+                every spike caught between checks{spike_count_phrase(@spike_events)}.
               </p>
               <div class="flex items-center gap-2">
                 <a href="/report" target="_blank" rel="noopener" class="btn btn-sm btn-primary">
@@ -282,6 +285,9 @@ defmodule TrackConnWeb.DashboardLive do
                 </a>
                 <a href="/report.csv" class="btn btn-sm btn-outline">
                   <.lucide name="download" class="size-4" /> Download CSV
+                </a>
+                <a href="/spikes.csv" class="btn btn-sm btn-outline">
+                  <.lucide name="zap" class="size-4" /> Spike log{spike_count_badge(@spike_events)}
                 </a>
               </div>
             </div>
@@ -374,6 +380,10 @@ defmodule TrackConnWeb.DashboardLive do
   defp lucide_paths("download"),
     do:
       ~S(<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>)
+
+  defp lucide_paths("zap"),
+    do:
+      ~S(<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>)
 
   defp lucide_paths(_), do: ""
 
@@ -476,6 +486,12 @@ defmodule TrackConnWeb.DashboardLive do
 
   defp fmt_pct(n) when is_number(n), do: "#{Float.round(n / 1, 1)}%"
   defp fmt_pct(_), do: "—"
+
+  defp spike_count_phrase(0), do: ""
+  defp spike_count_phrase(n), do: " (#{n} logged so far)"
+
+  defp spike_count_badge(0), do: ""
+  defp spike_count_badge(n), do: " (#{n})"
 
   defp fmt_ms(nil), do: "—"
   defp fmt_ms(n) when is_number(n), do: "#{Float.round(n / 1, 1)}ms"

@@ -49,6 +49,36 @@ defmodule TrackConn.StabilityTest do
     end
   end
 
+  describe "burst_events/2" do
+    test "no baseline yet (warming up) -> no latency event" do
+      burst = %{times: [10.0, 200.0, 11.0], sent: 3, received: 3}
+      assert Stability.burst_events(nil, burst) == []
+    end
+
+    test "a spike above the baseline is reported once per burst" do
+      burst = %{times: [12.0, 180.0, 11.0], sent: 3, received: 3}
+
+      assert [%{kind: :latency, peak_ms: 180.0, baseline_ms: 12.0, samples: 3}] =
+               Stability.burst_events(12.0, burst)
+    end
+
+    test "small wobble within the floor is not a spike" do
+      burst = %{times: [12.0, 20.0, 11.0], sent: 3, received: 3}
+      assert Stability.burst_events(12.0, burst) == []
+    end
+
+    test "packet loss is its own event" do
+      burst = %{times: [12.0, 11.0], sent: 4, received: 2}
+      assert [%{kind: :loss, loss_pct: 50.0, samples: 4}] = Stability.burst_events(12.0, burst)
+    end
+
+    test "a burst can report both a spike and loss" do
+      burst = %{times: [12.0, 190.0], sent: 4, received: 2}
+      kinds = Stability.burst_events(12.0, burst) |> Enum.map(& &1.kind)
+      assert :latency in kinds and :loss in kinds
+    end
+  end
+
   describe "percentile/2" do
     test "surfaces tail latency (nearest-rank)" do
       # 98 steady samples + 2 bad ones at the very top of the distribution

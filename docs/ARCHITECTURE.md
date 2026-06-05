@@ -28,8 +28,9 @@ lib/track_conn/
   deep_diagnostic.ex     # orchestrates the on-demand per-hop trace + interpretation
   monitor.ex             # supervised GenServer: paces sweeps off-loop, persists, prunes, broadcasts
   measurements.ex        # history storage/queries + retention pruning (SQLite)
-  measurements/sweep.ex  # the stored record
-  report.ex              # builds the exportable ISP report (printable HTML + CSV)
+  measurements/sweep.ex  # the stored sweep record
+  measurements/spike_event.ex # a logged latency-spike / loss event (ISP proof)
+  report.ex              # builds the exportable ISP report (printable HTML + CSV + spike log)
 
 lib/track_conn_web/live/dashboard_live.ex            # the single-screen LiveView dashboard
 lib/track_conn_web/controllers/report_controller.ex  # serves /report (HTML) and /report.csv

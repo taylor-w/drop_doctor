@@ -33,6 +33,19 @@ defmodule TrackConnWeb.ReportController do
     |> send_resp(200, Report.to_csv(report))
   end
 
+  @doc "CSV download of the logged instability events (spikes / brief loss)."
+  def spikes_csv(conn, params) do
+    report = Report.build(limit: limit(params))
+
+    conn
+    |> put_resp_content_type("text/csv")
+    |> put_resp_header(
+      "content-disposition",
+      ~s(attachment; filename="#{Report.filename(:spikes, report.generated_at)}")
+    )
+    |> send_resp(200, Report.spikes_csv(report))
+  end
+
   # `?limit=N` lets a technician pull a wider window; clamped so a stray value
   # can't ask for an unbounded query.
   defp limit(%{"limit" => raw}) do

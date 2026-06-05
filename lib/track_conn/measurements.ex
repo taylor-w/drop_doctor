@@ -5,7 +5,7 @@ defmodule TrackConn.Measurements do
   """
   import Ecto.Query
   alias TrackConn.Repo
-  alias TrackConn.Measurements.Sweep
+  alias TrackConn.Measurements.{SpikeEvent, Sweep}
 
   @doc """
   Persists a verdict (the map produced by `TrackConn.Diagnosis.analyze/1`) as a
@@ -57,15 +57,34 @@ defmodule TrackConn.Measurements do
   @doc "Total number of recorded sweeps."
   def count, do: Repo.aggregate(Sweep, :count)
 
+  # --- spike events -------------------------------------------------------
+
+  @doc "Persist one instability event (a latency spike or brief loss)."
+  def record_spike_event(attrs) do
+    %SpikeEvent{} |> SpikeEvent.changeset(attrs) |> Repo.insert()
+  end
+
+  @doc "Recent spike events, newest first."
+  def recent_spike_events(limit \\ 1000) do
+    SpikeEvent
+    |> order_by(desc: :occurred_at)
+    |> limit(^limit)
+    |> Repo.all()
+  end
+
+  @doc "Total number of recorded spike events."
+  def count_spike_events, do: Repo.aggregate(SpikeEvent, :count)
+
   @doc """
-  Deletes sweeps older than `max_age` seconds. Keeps the SQLite file bounded —
-  a sweep every 5s is ~17k rows/day, so without this the history grows forever.
-  Returns the number of rows deleted.
+  Deletes sweeps and spike events older than `max_age` seconds. Keeps the SQLite
+  file bounded — a sweep every 5s is ~17k rows/day, so without this the history
+  grows forever. Returns the total number of rows deleted.
   """
   def prune(max_age_seconds) do
     cutoff = DateTime.add(DateTime.utc_now(), -max_age_seconds, :second)
-    {deleted, _} = Sweep |> where([s], s.inserted_at < ^cutoff) |> Repo.delete_all()
-    deleted
+    {sweeps, _} = Sweep |> where([s], s.inserted_at < ^cutoff) |> Repo.delete_all()
+    {events, _} = SpikeEvent |> where([e], e.occurred_at < ^cutoff) |> Repo.delete_all()
+    sweeps + events
   end
 
   # Atom-keyed maps with atom values can't be stored as JSON directly; round-trip

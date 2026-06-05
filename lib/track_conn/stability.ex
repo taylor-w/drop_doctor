@@ -51,6 +51,43 @@ defmodule TrackConn.Stability do
   end
 
   @doc """
+  Detect discrete instability events in a single burst, given the recent
+  `baseline` median (`nil` while warming up — no spike detection until we know
+  what "normal" is). Returns event attrs (no timestamp/host — the caller stamps
+  those). A burst can yield a latency event, a loss event, or both.
+  """
+  def burst_events(baseline, %{times: times, sent: sent, received: received}) do
+    lost = max(sent - received, 0)
+
+    latency =
+      if is_number(baseline) and times != [] and spiking?(times, baseline) do
+        [
+          %{
+            kind: :latency,
+            peak_ms: round1(Enum.max(times)),
+            baseline_ms: round1(baseline),
+            samples: sent
+          }
+        ]
+      else
+        []
+      end
+
+    loss =
+      if lost > 0 and sent > 0 do
+        [%{kind: :loss, loss_pct: round1(lost * 100.0 / sent), samples: sent}]
+      else
+        []
+      end
+
+    latency ++ loss
+  end
+
+  defp spiking?(times, baseline) do
+    Enum.any?(times, fn r -> r > baseline * @spike_ratio and r - baseline >= @spike_floor_ms end)
+  end
+
+  @doc """
   Jitter as IPDV: the mean absolute difference between consecutive round-trips.
   This is the real measure of "how steady is the connection" — the thing that
   causes rubber-banding — not the average latency.

@@ -21,7 +21,7 @@ defmodule TrackConn.SpikeMonitor do
   use GenServer
   require Logger
 
-  alias TrackConn.{Probes.Ping, Stability}
+  alias TrackConn.{Aggregate, Measurements, Probes.Ping, Stability}
 
   @topic "stability"
   # Keep ~the last minute of samples (≈5/s × 60s). Bounds memory and defines the
@@ -70,6 +70,8 @@ defmodule TrackConn.SpikeMonitor do
       count: Keyword.get(opts, :count, @burst_count),
       # Injectable so the sampling loop can be unit-tested without real pings.
       burst_fun: Keyword.get(opts, :burst_fun, &Ping.burst/2),
+      # Persist detected spike/loss events (off in tests, which have no DB sandbox).
+      persist: Keyword.get(opts, :persist, true),
       running: true,
       samples: [],
       stats: Stability.empty(),
@@ -128,7 +130,12 @@ defmodule TrackConn.SpikeMonitor do
   # Paused, or a burst already in flight — don't start another.
   defp start_burst(state), do: state
 
-  defp absorb(state, %{times: times, received: received, sent: sent}) do
+  defp absorb(state, %{times: times, received: received, sent: sent} = result) do
+    # Detect events against the *prior* buffer's median (what "normal" was before
+    # this burst), then fold the new samples in.
+    baseline = Aggregate.median(for {:ok, ms} <- state.samples, do: ms)
+    log_events(state, baseline, result)
+
     # Replies become {:ok, rtt}; un-replied packets become :loss markers.
     new = Enum.map(times, &{:ok, &1}) ++ List.duplicate(:loss, max(sent - received, 0))
     samples = Enum.take(state.samples ++ new, -state.window)
@@ -136,6 +143,25 @@ defmodule TrackConn.SpikeMonitor do
 
     Phoenix.PubSub.broadcast(TrackConn.PubSub, @topic, {:stability, state.key, stats})
     %{state | samples: samples, stats: stats}
+  end
+
+  defp log_events(%{persist: false}, _baseline, _result), do: :ok
+
+  defp log_events(state, baseline, result) do
+    now = DateTime.utc_now()
+
+    for event <- Stability.burst_events(baseline, result) do
+      event
+      |> Map.merge(%{
+        kind: to_string(event.kind),
+        occurred_at: now,
+        segment: to_string(state.key),
+        host: state.host
+      })
+      |> Measurements.record_spike_event()
+    end
+
+    :ok
   end
 
   # macOS (and some hardened Linux) reject sub-second intervals for non-root

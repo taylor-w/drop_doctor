@@ -57,6 +57,10 @@ defmodule TrackConn.Report do
       verdict: Keyword.get_lazy(opts, :verdict, &Monitor.latest/0),
       deep: Keyword.get_lazy(opts, :deep, &safe_latest_deep/0),
       sweeps: sweeps,
+      spike_events:
+        Keyword.get_lazy(opts, :spike_events, fn ->
+          Measurements.recent_spike_events(Keyword.get(opts, :limit, @default_limit))
+        end),
       stats: stats(sweeps),
       targets: targets(),
       wsl?: Net.wsl?()
@@ -70,14 +74,17 @@ defmodule TrackConn.Report do
   end
 
   @doc "A filename with the generation timestamp baked in, e.g. `track_conn-isp-report-2026-06-05_1300Z.csv`."
-  def filename(format, %DateTime{} = at) when format in [:csv, :html] do
+  def filename(format, %DateTime{} = at) when format in [:csv, :html, :spikes] do
     stamp =
       at
       |> DateTime.truncate(:second)
       |> Calendar.strftime("%Y-%m-%d_%H%MZ")
 
-    ext = if format == :html, do: "html", else: "csv"
-    "track_conn-isp-report-#{stamp}.#{ext}"
+    case format do
+      :html -> "track_conn-isp-report-#{stamp}.html"
+      :csv -> "track_conn-isp-report-#{stamp}.csv"
+      :spikes -> "track_conn-spike-log-#{stamp}.csv"
+    end
   end
 
   # --- CSV ----------------------------------------------------------------
@@ -109,6 +116,40 @@ defmodule TrackConn.Report do
       s.internet_loss_pct,
       s.dns_ms,
       s.web_ms
+    ]
+    |> Enum.map(&csv_field/1)
+    |> Enum.join(",")
+  end
+
+  @spikes_csv_columns ~w(
+    timestamp_utc segment host kind peak_ms baseline_ms loss_pct samples
+  )
+
+  @doc """
+  The logged instability events as CSV, oldest first — the timestamped proof of
+  intermittent spikes/loss that the smoothed sweep timeline averages away.
+  """
+  def spikes_csv(%{spike_events: events}) do
+    rows =
+      events
+      |> Enum.reverse()
+      |> Enum.map(&spike_csv_row/1)
+
+    [Enum.join(@spikes_csv_columns, ",") | rows]
+    |> Enum.join("\r\n")
+    |> Kernel.<>("\r\n")
+  end
+
+  defp spike_csv_row(e) do
+    [
+      iso8601(e.occurred_at),
+      e.segment,
+      e.host,
+      e.kind,
+      e.peak_ms,
+      e.baseline_ms,
+      e.loss_pct,
+      e.samples
     ]
     |> Enum.map(&csv_field/1)
     |> Enum.join(",")
@@ -149,6 +190,7 @@ defmodule TrackConn.Report do
     #{header_section(report)}
     #{verdict_section(report.verdict)}
     #{deep_section(report.deep)}
+    #{stability_section(report.spike_events)}
     #{history_section(report.stats)}
     #{footer_section(report)}
     </main>
@@ -166,6 +208,7 @@ defmodule TrackConn.Report do
     <div class="toolbar no-print">
       <button onclick="trackConnPrint()">🖨️ Save as PDF / Print</button>
       <a href="/report.csv">⬇️ Download raw data (CSV)</a>
+      <a href="/spikes.csv">⬇️ Spike log (CSV)</a>
       <span class="hint">Tip: in the print dialog choose “Save as PDF” as the destination.</span>
     </div>
     """
@@ -283,6 +326,61 @@ defmodule TrackConn.Report do
   end
 
   defp deep_section(_), do: ""
+
+  defp stability_section([]) do
+    """
+    <section class="stability">
+      <h2>Connection stability — logged spikes</h2>
+      <p class="muted">No brief spikes or loss were caught by continuous sampling in this window —
+      the connection held steady between checks.</p>
+    </section>
+    """
+  end
+
+  defp stability_section(events) when is_list(events) do
+    rows =
+      events
+      |> Enum.take(50)
+      |> Enum.map_join("", fn e ->
+        """
+        <tr class="#{esc(spike_class(e.kind))}">
+          <td class="mono">#{esc(human_time(e.occurred_at))}</td>
+          <td>#{esc(segment_label(e.segment))}</td>
+          <td>#{esc(spike_detail(e))}</td>
+        </tr>
+        """
+      end)
+
+    """
+    <section class="stability">
+      <h2>Connection stability — logged spikes</h2>
+      <p>#{length(events)} brief spike/loss event(s) caught by continuous sampling (~5×/sec) —
+      the intermittent stutters that never show up in an "average" but ruin a call or game.</p>
+      <table class="spikes">
+        <thead><tr><th>When (UTC)</th><th>Where</th><th>What happened</th></tr></thead>
+        <tbody>#{rows}</tbody>
+      </table>
+      #{if length(events) > 50, do: ~s(<p class="muted small">Showing the 50 most recent — the full list is in the spike-log CSV.</p>), else: ~s(<p class="muted small">Full list with exact values is in the spike-log CSV export.</p>)}
+    </section>
+    """
+  end
+
+  defp stability_section(_), do: ""
+
+  defp segment_label("router"), do: "Your router / local network"
+  defp segment_label("internet"), do: "The open internet (via your ISP)"
+  defp segment_label(other), do: to_string(other)
+
+  defp spike_class("loss"), do: "loss-onset"
+  defp spike_class(_), do: "latency-jump"
+
+  defp spike_detail(%{kind: "latency", peak_ms: peak, baseline_ms: base}),
+    do: "Latency spiked to #{fmt_ms(peak)} (normal ~#{fmt_ms(base)})"
+
+  defp spike_detail(%{kind: "loss", loss_pct: pct}),
+    do: "#{fmt_num(pct)}% packet loss in a ~2s burst"
+
+  defp spike_detail(_), do: "—"
 
   defp history_section(stats) do
     """

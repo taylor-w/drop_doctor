@@ -74,13 +74,43 @@ defmodule TrackConn.ReportTest do
 
   defp build(opts \\ []) do
     Report.build(
-      Keyword.merge([now: @now, verdict: verdict(), deep: deep_report(), sweeps: sweeps()], opts)
+      Keyword.merge(
+        [now: @now, verdict: verdict(), deep: deep_report(), sweeps: sweeps(), spike_events: []],
+        opts
+      )
     )
+  end
+
+  # Two logged instability events (newest first), for the spike-log tests.
+  defp spike_events do
+    [
+      %TrackConn.Measurements.SpikeEvent{
+        occurred_at: ~U[2026-06-05 12:59:52Z],
+        segment: "internet",
+        host: "1.1.1.1",
+        kind: "latency",
+        peak_ms: 180.0,
+        baseline_ms: 14.0,
+        loss_pct: nil,
+        samples: 10
+      },
+      %TrackConn.Measurements.SpikeEvent{
+        occurred_at: ~U[2026-06-05 12:59:40Z],
+        segment: "internet",
+        host: "1.1.1.1",
+        kind: "loss",
+        peak_ms: nil,
+        baseline_ms: nil,
+        loss_pct: 30.0,
+        samples: 10
+      }
+    ]
   end
 
   describe "stats" do
     test "counts states, uptime, and the time window" do
-      stats = Report.build(now: @now, verdict: verdict(), deep: nil, sweeps: sweeps()).stats
+      stats =
+        Report.build(now: @now, verdict: verdict(), deep: nil, sweeps: sweeps(), spike_events: []).stats
 
       assert stats.total == 3
       assert stats.healthy == 1
@@ -91,7 +121,9 @@ defmodule TrackConn.ReportTest do
     end
 
     test "is safe with no history" do
-      stats = Report.build(now: @now, verdict: verdict(), deep: nil, sweeps: []).stats
+      stats =
+        Report.build(now: @now, verdict: verdict(), deep: nil, sweeps: [], spike_events: []).stats
+
       assert stats.total == 0
       assert stats.uptime == 100
     end
@@ -126,7 +158,8 @@ defmodule TrackConn.ReportTest do
       tricky = [%{hd(tricky) | headline: ~s(it's "fine", really)}]
 
       csv =
-        Report.build(now: @now, verdict: verdict(), deep: nil, sweeps: tricky) |> Report.to_csv()
+        Report.build(now: @now, verdict: verdict(), deep: nil, sweeps: tricky, spike_events: [])
+        |> Report.to_csv()
 
       assert csv =~ ~s("it's ""fine"", really")
     end
@@ -154,7 +187,10 @@ defmodule TrackConn.ReportTest do
 
     test "escapes HTML in dynamic content" do
       v = %{verdict() | headline: "<script>alert(1)</script> & friends"}
-      html = Report.build(now: @now, verdict: v, deep: nil, sweeps: sweeps()) |> Report.to_html()
+
+      html =
+        Report.build(now: @now, verdict: v, deep: nil, sweeps: sweeps(), spike_events: [])
+        |> Report.to_html()
 
       refute html =~ "<script>alert(1)</script>"
       assert html =~ "&lt;script&gt;alert(1)&lt;/script&gt; &amp; friends"
@@ -162,7 +198,7 @@ defmodule TrackConn.ReportTest do
 
     test "handles a missing deep trace gracefully" do
       html =
-        Report.build(now: @now, verdict: verdict(), deep: nil, sweeps: sweeps())
+        Report.build(now: @now, verdict: verdict(), deep: nil, sweeps: sweeps(), spike_events: [])
         |> Report.to_html()
 
       assert html =~ "No deep diagnostic has been run"
@@ -173,6 +209,55 @@ defmodule TrackConn.ReportTest do
     test "embeds the timestamp and extension" do
       assert Report.filename(:csv, @now) == "track_conn-isp-report-2026-06-05_1300Z.csv"
       assert Report.filename(:html, @now) == "track_conn-isp-report-2026-06-05_1300Z.html"
+      assert Report.filename(:spikes, @now) == "track_conn-spike-log-2026-06-05_1300Z.csv"
+    end
+  end
+
+  describe "spikes_csv/1 and the stability section" do
+    test "CSV has the header and one row per event, oldest first" do
+      csv =
+        Report.build(
+          now: @now,
+          verdict: verdict(),
+          deep: nil,
+          sweeps: [],
+          spike_events: spike_events()
+        )
+        |> Report.spikes_csv()
+
+      lines = String.split(csv, "\r\n", trim: true)
+
+      assert hd(lines) ==
+               "timestamp_utc,segment,host,kind,peak_ms,baseline_ms,loss_pct,samples"
+
+      assert length(lines) == 3
+      # oldest (the loss event) first
+      assert Enum.at(lines, 1) =~ "2026-06-05T12:59:40Z,internet,1.1.1.1,loss"
+      assert List.last(lines) =~ "2026-06-05T12:59:52Z,internet,1.1.1.1,latency,180.0,14.0"
+    end
+
+    test "empty spike log still yields a valid header-only CSV" do
+      csv =
+        Report.build(now: @now, verdict: verdict(), deep: nil, sweeps: [], spike_events: [])
+        |> Report.spikes_csv()
+
+      assert csv == "timestamp_utc,segment,host,kind,peak_ms,baseline_ms,loss_pct,samples\r\n"
+    end
+
+    test "HTML report includes a stability section listing the events" do
+      html =
+        Report.build(
+          now: @now,
+          verdict: verdict(),
+          deep: nil,
+          sweeps: [],
+          spike_events: spike_events()
+        )
+        |> Report.to_html()
+
+      assert html =~ "Connection stability"
+      assert html =~ "Latency spiked to 180.0ms"
+      assert html =~ "30.0% packet loss"
     end
   end
 end
