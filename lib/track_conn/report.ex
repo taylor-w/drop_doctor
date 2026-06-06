@@ -206,9 +206,9 @@ defmodule TrackConn.Report do
   defp toolbar do
     """
     <div class="toolbar no-print">
-      <button onclick="trackConnPrint()">🖨️ Save as PDF / Print</button>
-      <a href="/report.csv">⬇️ Download raw data (CSV)</a>
-      <a href="/spikes.csv">⬇️ Spike log (CSV)</a>
+      <button onclick="trackConnPrint()">#{ico("printer")} Save as PDF / Print</button>
+      <a href="/report.csv">#{ico("download")} Download raw data (CSV)</a>
+      <a href="/spikes.csv">#{ico("zap")} Spike log (CSV)</a>
       <span class="hint">Tip: in the print dialog choose “Save as PDF” as the destination.</span>
     </div>
     """
@@ -219,6 +219,23 @@ defmodule TrackConn.Report do
   defp logo_svg do
     ~s(<svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10a7.31 7.31 0 0 0 10 10Z"/><path d="m9 15 3-3"/><path d="M17 13a6 6 0 0 0-6-6"/><path d="M21 13A10 10 0 0 0 11 3"/></svg>)
   end
+
+  # Inline lucide icons for the toolbar (lucide.dev, ISC), matching the dashboard.
+  defp ico(name) do
+    ~s(<svg class="ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">#{ico_path(name)}</svg>)
+  end
+
+  defp ico_path("printer"),
+    do:
+      ~S(<path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/>)
+
+  defp ico_path("download"),
+    do:
+      ~S(<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>)
+
+  defp ico_path("zap"),
+    do:
+      ~S(<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>)
 
   defp header_section(report) do
     """
@@ -615,6 +632,7 @@ defmodule TrackConn.Report do
     main { max-width: 54rem; margin: 0 auto; }
     h1 { font-size: 1.9rem; margin: 0 0 .25rem; letter-spacing: -.02em; display: flex; align-items: center; gap: .55rem; }
     .logo { width: 1.7rem; height: 1.7rem; flex: none; color: var(--primary); }
+    .ico { width: 1rem; height: 1rem; flex: none; }
     h2 { font-size: 1.15rem; margin: 0 0 .75rem; letter-spacing: -.01em; padding-bottom: .5rem; border-bottom: 1px solid var(--line); }
     h3 { font-size: 1rem; margin: 1.1rem 0 .4rem; }
     p { margin: .45rem 0; }
@@ -672,6 +690,7 @@ defmodule TrackConn.Report do
                -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
                margin: 0 -1.25rem 1.5rem; padding: .7rem 1.25rem; display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
     .toolbar button, .toolbar a { font: inherit; font-size: .9rem; font-weight: 600; padding: .4rem .9rem; border-radius: .5rem;
+               display: inline-flex; align-items: center; gap: .45rem;
                border: 1px solid color-mix(in oklab, var(--ink) 16%, transparent);
                background-color: color-mix(in oklab, var(--ink) 6%, transparent);
                background-image: linear-gradient(180deg, color-mix(in oklab, white 6%, transparent), transparent 60%);

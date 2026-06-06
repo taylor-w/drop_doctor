@@ -199,8 +199,7 @@ defmodule TrackConnWeb.DashboardLive do
             <!-- Verdict banner -->
             <div class="space-y-2">
               <div class="flex items-center gap-3 flex-wrap">
-                <span class={"badge badge-lg gap-1.5 #{verdict_badge(@verdict.status)}"}>
-                  <span class="text-base leading-none">{status_emoji(@verdict.status)}</span>
+                <span class={"tc-pill #{verdict_pill(@verdict.status)}"}>
                   {String.upcase(to_string(@verdict.status))}
                 </span>
                 <span class="text-sm opacity-70">
@@ -643,17 +642,12 @@ defmodule TrackConnWeb.DashboardLive do
   defp node_alert(state) when state in [:degraded, :down], do: "tc-node-alert"
   defp node_alert(_), do: ""
 
-  defp verdict_badge(:healthy), do: "badge-success"
-  defp verdict_badge(:degraded), do: "badge-warning"
-  defp verdict_badge(:down), do: "badge-error"
-  defp verdict_badge(_), do: "badge-ghost"
+  defp verdict_pill(:healthy), do: "tc-pill-healthy"
+  defp verdict_pill(:degraded), do: "tc-pill-degraded"
+  defp verdict_pill(:down), do: "tc-pill-down"
+  defp verdict_pill(_), do: "tc-pill-unknown"
 
   # --- view helpers -------------------------------------------------------
-
-  defp status_emoji(:healthy), do: "🟢"
-  defp status_emoji(:degraded), do: "🟡"
-  defp status_emoji(:down), do: "🔴"
-  defp status_emoji(_), do: "⚪"
 
   defp state_dot(:healthy), do: "🟢"
   defp state_dot(:degraded), do: "🟡"
