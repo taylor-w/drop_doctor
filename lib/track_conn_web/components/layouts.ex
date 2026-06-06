@@ -37,7 +37,8 @@ defmodule TrackConnWeb.Layouts do
     ~H"""
     <header class="navbar px-4 sm:px-6 lg:px-8">
       <div class="flex-1"></div>
-      <div class="flex-none">
+      <div class="flex-none flex items-center gap-2">
+        <.view_controls />
         <.theme_toggle />
       </div>
     </header>
@@ -92,6 +93,41 @@ defmodule TrackConnWeb.Layouts do
         <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
       </.flash>
     </div>
+    """
+  end
+
+  @doc """
+  Stream-safe privacy control + timezone toggle. State lives in a `data-privacy`
+  / `data-tz` attribute on `<html>` (managed by the inline script in root.html),
+  so it persists, applies before paint, and is never re-rendered by LiveView.
+  """
+  def view_controls(assigns) do
+    ~H"""
+    <div
+      class="tc-seg"
+      role="group"
+      aria-label="Stream-safe privacy"
+      title="Stream-safe: hide IPs, hostnames & times so you can screen-share. Blur = hover to peek; lock = fully redact."
+    >
+      <button type="button" data-privacy-set="off" title="Show all values">
+        <.icon name="hero-eye-micro" class="size-4" />
+      </button>
+      <button type="button" data-privacy-set="blur" title="Stream-safe: blur IPs, hostnames & times (hover to peek)">
+        <.icon name="hero-eye-slash-micro" class="size-4" />
+      </button>
+      <button type="button" data-privacy-set="strict" title="Strict: redact IPs, hostnames & times (no peek)">
+        <.icon name="hero-lock-closed-micro" class="size-4" />
+      </button>
+    </div>
+    <button
+      type="button"
+      class="tc-seg-btn"
+      data-tz-toggle
+      title="Switch displayed times between your local time and UTC"
+    >
+      <.icon name="hero-clock-micro" class="size-4" />
+      <span class="tc-tz-local">Local</span><span class="tc-tz-utc">UTC</span>
+    </button>
     """
   end
 

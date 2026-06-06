@@ -217,6 +217,90 @@ body {
   border-color: var(--color-primary);
 }
 
+/* --- Stream-safe privacy ---------------------------------------------------
+   Mark personal/identifying values with .tc-secret; a data-privacy attribute on
+   <html> hides them. Pure CSS, so it applies to elements LiveView adds later
+   and never fights the DOM diff. blur = hover to peek; strict = redaction bar. */
+[data-privacy="blur"] .tc-secret {
+  filter: blur(6px);
+  cursor: help;
+  user-select: none;
+  transition: filter 0.12s ease;
+}
+[data-privacy="blur"] .tc-secret:hover {
+  filter: none;
+  user-select: text;
+}
+[data-privacy="strict"] .tc-secret {
+  color: transparent !important;
+  background-color: color-mix(in oklab, var(--color-base-content) 45%, transparent);
+  border-radius: 3px;
+  user-select: none;
+}
+[data-privacy="strict"] .tc-secret * {
+  visibility: hidden;
+}
+
+/* Segmented control (privacy) + pill button (timezone), matching the theme toggle. */
+.tc-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9999px;
+  border: 1px solid var(--color-base-300);
+  background: color-mix(in oklab, var(--color-base-content) 5%, transparent);
+}
+.tc-seg > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.4rem;
+  border-radius: 9999px;
+  opacity: 0.5;
+  cursor: pointer;
+  line-height: 0;
+}
+.tc-seg > button:hover {
+  opacity: 0.85;
+}
+/* Active segment derives from the <html> data-privacy attribute (which LiveView
+   never re-renders), so the control state can't flicker on a sweep update. */
+[data-privacy="off"] .tc-seg button[data-privacy-set="off"],
+[data-privacy="blur"] .tc-seg button[data-privacy-set="blur"],
+[data-privacy="strict"] .tc-seg button[data-privacy-set="strict"] {
+  opacity: 1;
+  background: var(--color-base-100);
+  box-shadow: inset 0 1px 0 0 color-mix(in oklab, white 10%, transparent);
+}
+
+/* Timezone label: show the right word via CSS instead of mutating text. */
+.tc-tz-utc {
+  display: none;
+}
+[data-tz="utc"] .tc-tz-local {
+  display: none;
+}
+[data-tz="utc"] .tc-tz-utc {
+  display: inline;
+}
+.tc-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 9999px;
+  border: 1px solid var(--color-base-300);
+  background: color-mix(in oklab, var(--color-base-content) 5%, transparent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.8;
+}
+.tc-seg-btn:hover {
+  opacity: 1;
+}
+
 /* --- Verdict pill: matches the report's status-pill exactly ---------------- */
 .tc-pill {
   display: inline-flex;

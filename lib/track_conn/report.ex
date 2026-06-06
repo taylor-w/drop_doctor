@@ -183,6 +183,7 @@ defmodule TrackConn.Report do
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>track_conn — ISP report (#{esc(iso8601(report.generated_at))})</title>
     <style>#{styles()}</style>
+    <script>#{view_controls_script()}</script>
     </head>
     <body>
     #{toolbar()}
@@ -203,6 +204,49 @@ defmodule TrackConn.Report do
     """
   end
 
+  # Stream-safe privacy + timezone, mirroring the dashboard. Self-contained.
+  defp view_controls_script do
+    """
+    (() => {
+      const root = document.documentElement;
+      root.setAttribute("data-privacy", localStorage.getItem("tc:privacy") || "off");
+      root.setAttribute("data-tz", localStorage.getItem("tc:tz") || "utc"); // report default: UTC
+      const pad = (n) => String(n).padStart(2, "0");
+      const fmt = (d, style, utc) => {
+        const Y = utc ? d.getUTCFullYear() : d.getFullYear();
+        const Mo = pad((utc ? d.getUTCMonth() : d.getMonth()) + 1);
+        const Da = pad(utc ? d.getUTCDate() : d.getDate());
+        const H = pad(utc ? d.getUTCHours() : d.getHours());
+        const Mi = pad(utc ? d.getUTCMinutes() : d.getMinutes());
+        const S = pad(utc ? d.getUTCSeconds() : d.getSeconds());
+        if (style === "time") return H + ":" + Mi + ":" + S;
+        if (style === "date") return Y + "-" + Mo + "-" + Da;
+        return Y + "-" + Mo + "-" + Da + " " + H + ":" + Mi + ":" + S;
+      };
+      const zone = (utc) => utc ? "UTC" : (Intl.DateTimeFormat().resolvedOptions().timeZone || "local");
+      const apply = () => {
+        const utc = (root.getAttribute("data-tz") || "utc") === "utc";
+        document.querySelectorAll("[data-utc]").forEach((el) => {
+          const iso = el.getAttribute("data-utc"); if (!iso) return;
+          const d = new Date(iso); if (isNaN(d.getTime())) return;
+          const t = fmt(d, el.getAttribute("data-utc-style") || "datetime", utc);
+          if (el.textContent !== t) el.textContent = t;
+        });
+        document.querySelectorAll("[data-tz-zone]").forEach((el) => {
+          const t = zone(utc); if (el.textContent !== t) el.textContent = t;
+        });
+      };
+      document.addEventListener("click", (e) => {
+        const p = e.target.closest("[data-privacy-set]");
+        if (p) { const m = p.getAttribute("data-privacy-set"); root.setAttribute("data-privacy", m); try { localStorage.setItem("tc:privacy", m); } catch (_) {} return; }
+        const t = e.target.closest("[data-tz-toggle]");
+        if (t) { const m = (root.getAttribute("data-tz") || "utc") === "utc" ? "local" : "utc"; root.setAttribute("data-tz", m); try { localStorage.setItem("tc:tz", m); } catch (_) {} apply(); }
+      });
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply); else apply();
+    })();
+    """
+  end
+
   defp toolbar do
     """
     <div class="toolbar no-print">
@@ -210,6 +254,14 @@ defmodule TrackConn.Report do
       <a href="/report.csv">#{ico("download")} Download raw data (CSV)</a>
       <a href="/spikes.csv">#{ico("zap")} Spike log (CSV)</a>
       <span class="hint">Tip: in the print dialog choose “Save as PDF” as the destination.</span>
+      <div class="tc-controls">
+        <span class="tc-seg" role="group" aria-label="Stream-safe privacy" title="Stream-safe: hide IPs, hostnames & times so you can screen-share. Blur = hover to peek; lock = redact.">
+          <button type="button" data-privacy-set="off" title="Show all values">#{ico("eye")}</button>
+          <button type="button" data-privacy-set="blur" title="Stream-safe: blur IPs, hostnames & times (hover to peek)">#{ico("eye-off")}</button>
+          <button type="button" data-privacy-set="strict" title="Strict: redact IPs, hostnames & times (no peek)">#{ico("lock")}</button>
+        </span>
+        <button type="button" class="tc-seg-btn" data-tz-toggle title="Switch displayed times between UTC and your local time">#{ico("clock")} <span class="tc-tz-local">Local</span><span class="tc-tz-utc">UTC</span></button>
+      </div>
     </div>
     """
   end
@@ -237,12 +289,39 @@ defmodule TrackConn.Report do
     do:
       ~S(<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>)
 
+  defp ico_path("eye"),
+    do:
+      ~S(<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>)
+
+  defp ico_path("eye-off"),
+    do:
+      ~S(<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>)
+
+  defp ico_path("lock"),
+    do:
+      ~S(<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>)
+
+  defp ico_path("clock"),
+    do: ~S(<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>)
+
+  # ISO-8601 UTC for the client-side timezone toggle (NaiveDateTime assumed UTC).
+  defp iso_utc(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
+  defp iso_utc(%NaiveDateTime{} = dt), do: NaiveDateTime.to_iso8601(dt) <> "Z"
+  defp iso_utc(other), do: to_string(other)
+
+  # A timestamp the JS can re-render in local/UTC; tc-secret so stream-safe hides it.
+  defp time_el(dt, style \\ "datetime") do
+    ~s(<span class="tc-secret" data-utc="#{esc(iso_utc(dt))}" data-utc-style="#{style}">#{esc(human_time(dt))}</span>)
+  end
+
+  defp secret(html), do: ~s(<span class="tc-secret">#{html}</span>)
+
   defp header_section(report) do
     """
     <header>
       <h1>#{logo_svg()} track_conn — Connection report</h1>
       <p class="subtitle">Is the problem your equipment, your DNS, or your ISP? This report is the timestamped proof.</p>
-      <p class="generated">Generated <strong>#{esc(human_time(report.generated_at))}</strong> (UTC) · #{esc(span_line(report.stats))}</p>
+      <p class="generated">Generated <strong>#{time_el(report.generated_at)}</strong> (<span class="tc-secret" data-tz-zone>UTC</span>) · #{span_line(report.stats)}</p>
     </header>
     """
   end
@@ -274,7 +353,7 @@ defmodule TrackConn.Report do
         <tr class="#{esc(state_string(seg[:state]))}">
           <td>#{esc(state_symbol(seg[:state]))}</td>
           <td><strong>#{esc(seg[:label])}</strong><br><span class="muted">#{esc(seg[:about])}</span></td>
-          <td class="mono">#{esc(seg[:target])}</td>
+          <td class="mono">#{if seg[:key] == :router, do: secret(esc(seg[:target])), else: esc(seg[:target])}</td>
           <td class="mono">#{esc(seg[:summary])}</td>
           <td>#{esc(String.upcase(state_string(seg[:state])))}</td>
         </tr>
@@ -324,7 +403,7 @@ defmodule TrackConn.Report do
         """
         <tr class="#{esc(hop_class(hop))}">
           <td class="mono">#{esc(hop[:count])}</td>
-          <td class="mono">#{esc(display_host(hop))}</td>
+          <td class="mono">#{secret(esc(display_host(hop)))}</td>
           <td>#{zone_badge(hop[:zone])}</td>
           <td class="mono num">#{esc(fmt_pct(hop[:loss_pct], hop))}</td>
           <td class="mono num">#{esc(fmt_ms(hop[:avg]))}</td>
@@ -367,7 +446,7 @@ defmodule TrackConn.Report do
       |> Enum.map_join("", fn e ->
         """
         <tr class="#{esc(spike_class(e.kind))}">
-          <td class="mono">#{esc(human_time(e.occurred_at))}</td>
+          <td class="mono">#{time_el(e.occurred_at)}</td>
           <td>#{esc(segment_label(e.segment))}</td>
           <td>#{esc(spike_detail(e))}</td>
         </tr>
@@ -416,7 +495,7 @@ defmodule TrackConn.Report do
           <tr><td>Degraded</td><td class="mono num">#{stats.degraded}</td></tr>
           <tr><td>Down</td><td class="mono num">#{stats.down}</td></tr>
           <tr><td>Uptime (not down)</td><td class="mono num">#{stats.uptime}%</td></tr>
-          <tr><td>Window covered</td><td>#{esc(span_line(stats))}</td></tr>
+          <tr><td>Window covered</td><td>#{span_line(stats)}</td></tr>
         </tbody>
       </table>
       <p class="muted small">The full measurement-by-measurement timeline (with timestamps) is in the CSV export.</p>
@@ -433,7 +512,13 @@ defmodule TrackConn.Report do
 
     targets =
       Enum.map_join(report.targets, "", fn {label, target} ->
-        ~s(<li><strong>#{esc(label)}:</strong> <span class="mono">#{esc(target)}</span></li>)
+        # The router/local address can reveal your subnet; hide it under stream-safe.
+        value =
+          if String.starts_with?(label, "Your router"),
+            do: secret(~s(<span class="mono">#{esc(target)}</span>)),
+            else: ~s(<span class="mono">#{esc(target)}</span>)
+
+        ~s(<li><strong>#{esc(label)}:</strong> #{value}</li>)
       end)
 
     """
@@ -441,7 +526,7 @@ defmodule TrackConn.Report do
       <h3>What was measured</h3>
       <ul class="targets">#{targets}</ul>
       #{wsl_note}
-      <p class="small muted">Generated by track_conn — an open-source connection diagnostic. Times are UTC.</p>
+      <p class="small muted">Generated by track_conn — an open-source connection diagnostic. Times are <span class="tc-secret" data-tz-zone>UTC</span>.</p>
     </footer>
     """
   end
@@ -485,7 +570,7 @@ defmodule TrackConn.Report do
   defp span_line(%{first: nil}), do: "no measurements recorded yet"
 
   defp span_line(%{first: first, last: last}) do
-    "#{total_window(first, last)} of monitoring, #{human_time(first)} → #{human_time(last)} UTC"
+    ~s(#{total_window(first, last)} of monitoring, #{time_el(first)} → #{time_el(last)} <span class="tc-secret" data-tz-zone>UTC</span>)
   end
 
   defp total_window(first, last) do
@@ -689,21 +774,42 @@ defmodule TrackConn.Report do
     .toolbar { position: sticky; top: 0; z-index: 5; background: color-mix(in oklab, var(--bg) 82%, transparent);
                -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
                margin: 0 -1.25rem 1.5rem; padding: .7rem 1.25rem; display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
-    .toolbar button, .toolbar a { font: inherit; font-size: .9rem; font-weight: 600; padding: .4rem .9rem; border-radius: .5rem;
+    .toolbar > button, .toolbar > a { font: inherit; font-size: .9rem; font-weight: 600; padding: .4rem .9rem; border-radius: .5rem;
                display: inline-flex; align-items: center; gap: .45rem;
                border: 1px solid color-mix(in oklab, var(--ink) 16%, transparent);
                background-color: color-mix(in oklab, var(--ink) 6%, transparent);
                background-image: linear-gradient(180deg, color-mix(in oklab, white 6%, transparent), transparent 60%);
                box-shadow: inset 0 1px 0 0 color-mix(in oklab, white 8%, transparent);
                color: var(--ink); cursor: pointer; text-decoration: none; transition: background-color .15s, border-color .15s; }
-    .toolbar button:hover, .toolbar a:hover { border-color: color-mix(in oklab, var(--ink) 28%, transparent);
+    .toolbar > button:hover, .toolbar > a:hover { border-color: color-mix(in oklab, var(--ink) 28%, transparent);
                background-color: color-mix(in oklab, var(--ink) 12%, transparent); }
-    .toolbar button { color: #fff; border-color: color-mix(in oklab, var(--primary) 55%, transparent);
+    .toolbar > button { color: #fff; border-color: color-mix(in oklab, var(--primary) 55%, transparent);
                background-color: color-mix(in oklab, var(--primary) 88%, transparent);
                background-image: linear-gradient(180deg, color-mix(in oklab, white 16%, transparent), transparent 55%);
                box-shadow: inset 0 1px 0 0 color-mix(in oklab, white 22%, transparent), 0 6px 16px -10px color-mix(in oklab, var(--primary) 85%, transparent); }
-    .toolbar button:hover { background-color: var(--primary); border-color: var(--primary); }
+    .toolbar > button:hover { background-color: var(--primary); border-color: var(--primary); }
     .toolbar .hint { color: var(--muted); font-size: .82rem; }
+    /* View controls: stream-safe privacy + timezone toggle (match the dashboard). */
+    .tc-controls { display: inline-flex; align-items: center; gap: .5rem; margin-left: auto; }
+    .tc-seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 9999px; border: 1px solid var(--line); background: color-mix(in oklab, var(--ink) 6%, transparent); }
+    .tc-seg button { display: inline-flex; align-items: center; justify-content: center; padding: .25rem .4rem; border-radius: 9999px; border: none; background: none; color: var(--ink); opacity: .5; cursor: pointer; line-height: 0; }
+    .tc-seg button:hover { opacity: .85; }
+    [data-privacy="off"] .tc-seg button[data-privacy-set="off"],
+    [data-privacy="blur"] .tc-seg button[data-privacy-set="blur"],
+    [data-privacy="strict"] .tc-seg button[data-privacy-set="strict"] { opacity: 1; background: var(--card); box-shadow: inset 0 1px 0 0 color-mix(in oklab, white 10%, transparent); }
+    .tc-seg svg { width: 1rem; height: 1rem; }
+    .tc-seg-btn { display: inline-flex; align-items: center; gap: .3rem; padding: .3rem .6rem; border-radius: 9999px; border: 1px solid var(--line);
+                  background: color-mix(in oklab, var(--ink) 6%, transparent); color: var(--ink); font: inherit; font-size: .78rem; font-weight: 600; cursor: pointer; opacity: .85; }
+    .tc-seg-btn:hover { opacity: 1; }
+    .tc-seg-btn svg { width: 1rem; height: 1rem; }
+    .tc-tz-utc { display: none; }
+    [data-tz="utc"] .tc-tz-local { display: none; }
+    [data-tz="utc"] .tc-tz-utc { display: inline; }
+    /* Stream-safe: blur (hover to peek) or redact personal/identifying values. */
+    [data-privacy="blur"] .tc-secret { filter: blur(6px); cursor: help; user-select: none; transition: filter .12s ease; }
+    [data-privacy="blur"] .tc-secret:hover { filter: none; user-select: text; }
+    [data-privacy="strict"] .tc-secret { color: transparent !important; background-color: color-mix(in oklab, var(--ink) 45%, transparent); border-radius: 3px; user-select: none; }
+    [data-privacy="strict"] .tc-secret * { visibility: hidden; }
     @media print {
       :root { color-scheme: light; --bg:#fff; --card:#fff; --line:#ddd; --ink:#1a1a1a; --muted:#666;
               --primary:#2563eb; --ok:#15803d; --warn:#b45309; --bad:#b91c1c; }
@@ -716,6 +822,9 @@ defmodule TrackConn.Report do
       .status-pill.healthy, .status-pill.degraded { color: #fff; }
       tbody tr:hover { background: none; }
       pre { background: #f5f5f5; border-color: #e5e5e5; }
+      /* The printed proof always shows real values, regardless of stream-safe. */
+      .tc-secret { filter: none !important; color: inherit !important; background: none !important; }
+      .tc-secret * { visibility: visible !important; }
     }
     """
   end

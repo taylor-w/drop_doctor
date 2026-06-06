@@ -260,10 +260,10 @@ defmodule TrackConnWeb.DashboardLive do
                   <span class={"font-mono #{status_text(@expanded_seg.state)}"}>{@expanded_seg.summary}</span>
                 </div>
                 <%= if @expanded_seg.key == :usable do %>
-                  <pre class="bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{@segs_by_key.dns.raw}
+                  <pre class="tc-secret bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{@segs_by_key.dns.raw}
     {@segs_by_key.web.raw}</pre>
                 <% else %>
-                  <pre class="bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{@expanded_seg.raw}</pre>
+                  <pre class="tc-secret bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{@expanded_seg.raw}</pre>
                 <% end %>
               </div>
             <% end %>
@@ -401,7 +401,11 @@ defmodule TrackConnWeb.DashboardLive do
         </div>
 
         <p class="text-center text-xs opacity-40">
-          Monitoring {if @running, do: "every 5s", else: "paused"} · {@total_all} sweeps recorded · open source
+          Monitoring {if @running, do: "every 5s", else: "paused"} · {@total_all} sweeps recorded<%= case List.first(@history) do %>
+            <% %{inserted_at: at} -> %>
+              · last check <span class="tc-secret" data-utc={utc_iso(at)} data-utc-style="time">{fmt_time(at)}</span>
+            <% _ -> %>
+          <% end %> · open source
         </p>
       </div>
     </Layouts.app>
@@ -504,7 +508,7 @@ defmodule TrackConnWeb.DashboardLive do
           <%= for hop <- @report.hops do %>
             <div class={"flex items-center gap-2 rounded px-2 py-1 #{hop_row_class(hop)}"}>
               <span class="font-mono opacity-50 w-6 text-right">{hop.count}</span>
-              <span class="font-mono flex-1 truncate min-w-0">{display_host(hop)}</span>
+              <span class="tc-secret font-mono flex-1 truncate min-w-0">{display_host(hop)}</span>
               <span class={"tc-badge shrink-0 #{deep_zone_class(hop.zone)}"}>
                 {deep_zone_label(hop.zone)}
               </span>
@@ -690,6 +694,12 @@ defmodule TrackConnWeb.DashboardLive do
   end
 
   defp fmt_time(_), do: ""
+
+  # ISO-8601 in UTC for the client-side timezone toggle. A NaiveDateTime is
+  # assumed UTC (gets a trailing Z) so the browser parses it correctly.
+  defp utc_iso(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
+  defp utc_iso(%NaiveDateTime{} = dt), do: NaiveDateTime.to_iso8601(dt) <> "Z"
+  defp utc_iso(_), do: ""
 
   defp stats([]), do: %{total: 0, healthy: 0, uptime: 100}
 
