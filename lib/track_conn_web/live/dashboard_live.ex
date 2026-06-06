@@ -168,10 +168,6 @@ defmodule TrackConnWeb.DashboardLive do
             </p>
           </div>
           <div class="flex items-center gap-2">
-            <span class={"badge badge-lg gap-1.5 #{verdict_badge(@verdict.status)}"}>
-              <span class="text-base leading-none">{status_emoji(@verdict.status)}</span>
-              {String.upcase(to_string(@verdict.status))}
-            </span>
             <button class="btn btn-sm" phx-click="toggle_monitor">
               <%= if @running do %>
                 <.lucide name="pause" class="size-4" /> Pause
@@ -197,18 +193,24 @@ defmodule TrackConnWeb.DashboardLive do
           </div>
         <% end %>
 
-    <!-- PIPELINE HERO -->
-        <div class={"card shadow-lg border-2 overflow-hidden #{hero_border(@verdict.status)}"}>
+    <!-- PIPELINE HERO — verdict-banner treatment, matching /report -->
+        <div class={"card shadow-lg overflow-hidden border border-base-300 border-l-4 #{hero_accent(@verdict.status)}"}>
           <div class="card-body gap-5">
-            <!-- Verdict line -->
-            <div class="text-center space-y-2">
-              <h2 class={"text-2xl font-bold #{status_text(@verdict.status)}"}>
+            <!-- Verdict banner -->
+            <div class="space-y-2">
+              <div class="flex items-center gap-3 flex-wrap">
+                <span class={"badge badge-lg gap-1.5 #{verdict_badge(@verdict.status)}"}>
+                  <span class="text-base leading-none">{status_emoji(@verdict.status)}</span>
+                  {String.upcase(to_string(@verdict.status))}
+                </span>
+                <span class="text-sm opacity-70">
+                  Likely cause: <span class="font-semibold">{culprit_label(@verdict.culprit)}</span>
+                </span>
+              </div>
+              <h2 class={"text-2xl sm:text-3xl font-bold #{status_text(@verdict.status)}"}>
                 {@verdict.headline}
               </h2>
-              <p class="max-w-2xl mx-auto text-sm opacity-80">{Map.get(@verdict, :detail)}</p>
-              <div class="badge badge-outline">
-                Likely cause: <span class="font-semibold ml-1">{culprit_label(@verdict.culprit)}</span>
-              </div>
+              <p class="max-w-3xl text-sm opacity-80">{Map.get(@verdict, :detail)}</p>
               <%= if Map.get(@verdict, :provisional?) and Map.get(@verdict, :samples, 0) > 0 do %>
                 <div class="text-xs opacity-50">
                   Confirming — verdict based on {@verdict.samples} of 5 readings so far
@@ -280,7 +282,7 @@ defmodule TrackConnWeb.DashboardLive do
           <!-- Stability -->
           <div class="card border border-base-300">
             <div class="card-body gap-3">
-              <h3 class="text-xs font-semibold uppercase opacity-60 flex items-center gap-1.5">
+              <h3 class="text-sm font-semibold flex items-center gap-2 pb-2 mb-1 border-b border-base-300">
                 <.lucide name="activity" class="size-4" /> Live stability
               </h3>
               <%= for {key, name} <- [internet: "Internet", router: "Router"] do %>
@@ -308,7 +310,7 @@ defmodule TrackConnWeb.DashboardLive do
     <!-- History -->
           <div class="card border border-base-300">
             <div class="card-body gap-3">
-              <h3 class="text-xs font-semibold uppercase opacity-60 flex items-center gap-1.5">
+              <h3 class="text-sm font-semibold flex items-center gap-2 pb-2 mb-1 border-b border-base-300">
                 <.lucide name="bar-chart" class="size-4" /> Recent history
               </h3>
               <div class="flex items-end gap-px h-20 overflow-hidden" title="oldest → newest">
@@ -334,7 +336,7 @@ defmodule TrackConnWeb.DashboardLive do
     <!-- Save proof -->
           <div class="card border border-base-300">
             <div class="card-body gap-3">
-              <h3 class="text-xs font-semibold uppercase opacity-60 flex items-center gap-1.5">
+              <h3 class="text-sm font-semibold flex items-center gap-2 pb-2 mb-1 border-b border-base-300">
                 <.lucide name="file-text" class="size-4" /> Save proof for your ISP
               </h3>
               <p class="text-xs opacity-60 leading-snug">
@@ -359,7 +361,7 @@ defmodule TrackConnWeb.DashboardLive do
         <div class="card border border-base-300">
           <div class="card-body gap-3">
             <div class="flex items-center justify-between flex-wrap gap-2">
-              <h3 class="text-xs font-semibold uppercase opacity-60 flex items-center gap-1.5">
+              <h3 class="text-sm font-semibold flex items-center gap-2 pb-2 mb-1 border-b border-base-300">
                 <.lucide name="route" class="size-4" /> Deep diagnostic — per-hop trace to {@deep.target}
               </h3>
               <button
@@ -663,10 +665,10 @@ defmodule TrackConnWeb.DashboardLive do
   defp status_text(:down), do: "text-error"
   defp status_text(_), do: "opacity-60"
 
-  defp hero_border(:healthy), do: "border-success"
-  defp hero_border(:degraded), do: "border-warning"
-  defp hero_border(:down), do: "border-error"
-  defp hero_border(_), do: "border-base-300"
+  defp hero_accent(:healthy), do: "border-l-success"
+  defp hero_accent(:degraded), do: "border-l-warning"
+  defp hero_accent(:down), do: "border-l-error"
+  defp hero_accent(_), do: "border-l-base-300"
 
   defp bar_color("healthy"), do: "bg-success"
   defp bar_color("degraded"), do: "bg-warning"
