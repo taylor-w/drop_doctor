@@ -22,7 +22,10 @@ defmodule TrackConnWeb.DashboardLiveTest do
     assert html =~ "track_conn"
     assert html =~ "Test now"
     assert html =~ "Recent history"
-    assert html =~ "The path from you to the internet"
+    # The pipeline hero (You → Router → Your ISP → Internet) replaced the old
+    # "path from you to the internet" ladder.
+    assert html =~ "Your ISP"
+    assert html =~ "Live stability"
     assert html =~ "Deep diagnostic"
   end
 
