@@ -308,7 +308,7 @@ defmodule TrackConn.Report do
         <tr class="#{esc(hop_class(hop))}">
           <td class="mono">#{esc(hop[:count])}</td>
           <td class="mono">#{esc(display_host(hop))}</td>
-          <td>#{esc(zone_label(hop[:zone]))}</td>
+          <td>#{zone_badge(hop[:zone])}</td>
           <td class="mono num">#{esc(fmt_pct(hop[:loss_pct], hop))}</td>
           <td class="mono num">#{esc(fmt_ms(hop[:avg]))}</td>
         </tr>
@@ -551,6 +551,12 @@ defmodule TrackConn.Report do
     end
   end
 
+  defp zone_badge(zone) do
+    key = to_string(zone || "unknown")
+    key = if key in ~w(local isp_edge isp transit destination), do: key, else: "unknown"
+    ~s(<span class="zone #{key}">#{esc(zone_label(zone))}</span>)
+  end
+
   defp zone_label(zone) do
     case to_string(zone || "") do
       "local" -> "Your network"
@@ -643,6 +649,13 @@ defmodule TrackConn.Report do
     tbody tr:hover { background: color-mix(in oklab, var(--primary) 9%, transparent); }
     td.num { text-align: right; }
     .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85em; font-variant-numeric: tabular-nums; }
+    /* Soft zone chips, matching the dashboard's deep-diagnostic badges. */
+    .zone { display: inline-flex; align-items: center; font-size: .72rem; font-weight: 600; padding: .1rem .5rem; border-radius: .4rem; white-space: nowrap;
+            border: 1px solid color-mix(in oklab, currentColor 30%, transparent); background: color-mix(in oklab, currentColor 13%, transparent); }
+    .zone.local { color: var(--primary); }
+    .zone.isp_edge, .zone.isp { color: var(--warn); }
+    .zone.destination { color: var(--ok); }
+    .zone.transit, .zone.unknown { color: var(--muted); }
     .muted { color: var(--muted); }
     .small { font-size: .82rem; }
     tr.healthy td:first-child { color: var(--ok); font-weight: 800; }
@@ -658,9 +671,19 @@ defmodule TrackConn.Report do
     .toolbar { position: sticky; top: 0; z-index: 5; background: color-mix(in oklab, var(--bg) 82%, transparent);
                -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
                margin: 0 -1.25rem 1.5rem; padding: .7rem 1.25rem; display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
-    .toolbar button, .toolbar a { font: inherit; font-size: .9rem; padding: .4rem .9rem; border-radius: .5rem;
-               border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; text-decoration: none; }
-    .toolbar button { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 600; }
+    .toolbar button, .toolbar a { font: inherit; font-size: .9rem; font-weight: 600; padding: .4rem .9rem; border-radius: .5rem;
+               border: 1px solid color-mix(in oklab, var(--ink) 16%, transparent);
+               background-color: color-mix(in oklab, var(--ink) 6%, transparent);
+               background-image: linear-gradient(180deg, color-mix(in oklab, white 6%, transparent), transparent 60%);
+               box-shadow: inset 0 1px 0 0 color-mix(in oklab, white 8%, transparent);
+               color: var(--ink); cursor: pointer; text-decoration: none; transition: background-color .15s, border-color .15s; }
+    .toolbar button:hover, .toolbar a:hover { border-color: color-mix(in oklab, var(--ink) 28%, transparent);
+               background-color: color-mix(in oklab, var(--ink) 12%, transparent); }
+    .toolbar button { color: #fff; border-color: color-mix(in oklab, var(--primary) 55%, transparent);
+               background-color: color-mix(in oklab, var(--primary) 88%, transparent);
+               background-image: linear-gradient(180deg, color-mix(in oklab, white 16%, transparent), transparent 55%);
+               box-shadow: inset 0 1px 0 0 color-mix(in oklab, white 22%, transparent), 0 6px 16px -10px color-mix(in oklab, var(--primary) 85%, transparent); }
+    .toolbar button:hover { background-color: var(--primary); border-color: var(--primary); }
     .toolbar .hint { color: var(--muted); font-size: .82rem; }
     @media print {
       :root { color-scheme: light; --bg:#fff; --card:#fff; --line:#ddd; --ink:#1a1a1a; --muted:#666;

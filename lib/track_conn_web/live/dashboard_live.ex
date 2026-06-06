@@ -168,14 +168,14 @@ defmodule TrackConnWeb.DashboardLive do
             </p>
           </div>
           <div class="flex items-center gap-2">
-            <button class="btn btn-sm" phx-click="toggle_monitor">
+            <button class="btn btn-sm tc-btn" phx-click="toggle_monitor">
               <%= if @running do %>
                 <.lucide name="pause" class="size-4" /> Pause
               <% else %>
                 <.lucide name="play" class="size-4" /> Resume
               <% end %>
             </button>
-            <button class="btn btn-sm btn-primary" phx-click="sweep_now">
+            <button class="btn btn-sm tc-btn tc-btn-primary" phx-click="sweep_now">
               <.lucide name="refresh-cw" class="size-4" /> Test now
             </button>
           </div>
@@ -343,13 +343,13 @@ defmodule TrackConnWeb.DashboardLive do
                 A timestamped report with the verdict, per-segment evidence, your latest trace, and every spike caught between checks{spike_count_phrase(@spike_events)}.
               </p>
               <div class="flex flex-col gap-2 mt-auto">
-                <a href="/report" target="_blank" rel="noopener" class="btn btn-sm btn-primary justify-start">
+                <a href="/report" target="_blank" rel="noopener" class="btn btn-sm tc-btn tc-btn-primary justify-start">
                   <.lucide name="file-text" class="size-4" /> Open report (Save as PDF)
                 </a>
-                <a href="/report.csv" download class="btn btn-sm btn-outline justify-start">
+                <a href="/report.csv" download class="btn btn-sm tc-btn justify-start">
                   <.lucide name="download" class="size-4" /> Download CSV
                 </a>
-                <a href="/spikes.csv" download class="btn btn-sm btn-outline justify-start">
+                <a href="/spikes.csv" download class="btn btn-sm tc-btn justify-start">
                   <.lucide name="zap" class="size-4" /> Spike log{spike_count_badge(@spike_events)}
                 </a>
               </div>
@@ -365,7 +365,7 @@ defmodule TrackConnWeb.DashboardLive do
                 <.lucide name="route" class="size-4" /> Deep diagnostic — per-hop trace to {@deep.target}
               </h3>
               <button
-                class="btn btn-sm btn-outline"
+                class="btn btn-sm tc-btn"
                 phx-click="run_deep"
                 disabled={@deep.status == :running or not @mtr_available}
               >
@@ -506,7 +506,7 @@ defmodule TrackConnWeb.DashboardLive do
             <div class={"flex items-center gap-2 rounded px-2 py-1 #{hop_row_class(hop)}"}>
               <span class="font-mono opacity-50 w-6 text-right">{hop.count}</span>
               <span class="font-mono flex-1 truncate min-w-0">{display_host(hop)}</span>
-              <span class={"badge badge-sm shrink-0 #{deep_zone_class(hop.zone)}"}>
+              <span class={"tc-badge shrink-0 #{deep_zone_class(hop.zone)}"}>
                 {deep_zone_label(hop.zone)}
               </span>
               <span class={"font-mono w-16 text-right shrink-0 #{loss_class(hop)}"}>
@@ -547,11 +547,11 @@ defmodule TrackConnWeb.DashboardLive do
   defp deep_zone_label(:destination), do: "Destination"
   defp deep_zone_label(_), do: "—"
 
-  defp deep_zone_class(:local), do: "badge-info"
-  defp deep_zone_class(:isp_edge), do: "badge-warning"
-  defp deep_zone_class(:isp), do: "badge-warning badge-outline"
-  defp deep_zone_class(:destination), do: "badge-success"
-  defp deep_zone_class(_), do: "badge-ghost"
+  defp deep_zone_class(:local), do: "text-info"
+  defp deep_zone_class(:isp_edge), do: "text-warning"
+  defp deep_zone_class(:isp), do: "text-warning"
+  defp deep_zone_class(:destination), do: "text-success"
+  defp deep_zone_class(_), do: "text-base-content/60"
 
   # Pull current stats for each ping host; falls back to nil if the monitors
   # aren't running (e.g. in tests, which set :start_monitor false).
