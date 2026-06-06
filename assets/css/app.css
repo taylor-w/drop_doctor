@@ -151,3 +151,53 @@
     animation: none;
   }
 }
+
+/* --- Panel depth -----------------------------------------------------------
+   Instead of flat borders or an accent bar, cards get real elevation: a faint
+   top sheen, a 1px top highlight, and a soft drop shadow. Crafted, not flat. */
+.tc-panel {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklab, white 5%, transparent),
+    transparent 55%
+  );
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklab, white 9%, transparent),
+    0 12px 32px -22px rgb(0 0 0 / 0.6);
+}
+
+/* The hero carries the same depth plus a status-colored wash bleeding down
+   from the top edge — the status cue, with no left-side accent line. */
+.tc-hero {
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklab, white 11%, transparent),
+    0 18px 48px -26px rgb(0 0 0 / 0.65);
+}
+.tc-hero-healthy {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-success) 15%, transparent),
+    transparent 48%
+  );
+}
+.tc-hero-degraded {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-warning) 15%, transparent),
+    transparent 48%
+  );
+}
+.tc-hero-down {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-error) 17%, transparent),
+    transparent 48%
+  );
+}
+.tc-hero-unknown {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-base-content) 6%, transparent),
+    transparent 48%
+  );
+}

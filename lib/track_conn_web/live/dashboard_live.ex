@@ -193,8 +193,8 @@ defmodule TrackConnWeb.DashboardLive do
           </div>
         <% end %>
 
-    <!-- PIPELINE HERO — verdict-banner treatment, matching /report -->
-        <div class={"card shadow-lg overflow-hidden border border-base-300 border-l-4 #{hero_accent(@verdict.status)}"}>
+    <!-- PIPELINE HERO — verdict banner with status wash + elevation -->
+        <div class={"card overflow-hidden border border-base-300 tc-hero #{hero_tint(@verdict.status)}"}>
           <div class="card-body gap-5">
             <!-- Verdict banner -->
             <div class="space-y-2">
@@ -280,7 +280,7 @@ defmodule TrackConnWeb.DashboardLive do
     <!-- BENTO GRID -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <!-- Stability -->
-          <div class="card border border-base-300">
+          <div class="card border border-base-300 tc-panel">
             <div class="card-body gap-3">
               <h3 class="text-sm font-semibold flex items-center gap-2 pb-2 mb-1 border-b border-base-300">
                 <.lucide name="activity" class="size-4" /> Live stability
@@ -308,7 +308,7 @@ defmodule TrackConnWeb.DashboardLive do
           </div>
 
     <!-- History -->
-          <div class="card border border-base-300">
+          <div class="card border border-base-300 tc-panel">
             <div class="card-body gap-3">
               <h3 class="text-sm font-semibold flex items-center gap-2 pb-2 mb-1 border-b border-base-300">
                 <.lucide name="bar-chart" class="size-4" /> Recent history
@@ -334,7 +334,7 @@ defmodule TrackConnWeb.DashboardLive do
           </div>
 
     <!-- Save proof -->
-          <div class="card border border-base-300">
+          <div class="card border border-base-300 tc-panel">
             <div class="card-body gap-3">
               <h3 class="text-sm font-semibold flex items-center gap-2 pb-2 mb-1 border-b border-base-300">
                 <.lucide name="file-text" class="size-4" /> Save proof for your ISP
@@ -358,7 +358,7 @@ defmodule TrackConnWeb.DashboardLive do
         </div>
 
     <!-- Deep diagnostic (per-hop trace) -->
-        <div class="card border border-base-300">
+        <div class="card border border-base-300 tc-panel">
           <div class="card-body gap-3">
             <div class="flex items-center justify-between flex-wrap gap-2">
               <h3 class="text-sm font-semibold flex items-center gap-2 pb-2 mb-1 border-b border-base-300">
@@ -665,10 +665,10 @@ defmodule TrackConnWeb.DashboardLive do
   defp status_text(:down), do: "text-error"
   defp status_text(_), do: "opacity-60"
 
-  defp hero_accent(:healthy), do: "border-l-success"
-  defp hero_accent(:degraded), do: "border-l-warning"
-  defp hero_accent(:down), do: "border-l-error"
-  defp hero_accent(_), do: "border-l-base-300"
+  defp hero_tint(:healthy), do: "tc-hero-healthy"
+  defp hero_tint(:degraded), do: "tc-hero-degraded"
+  defp hero_tint(:down), do: "tc-hero-down"
+  defp hero_tint(_), do: "tc-hero-unknown"
 
   defp bar_color("healthy"), do: "bg-success"
   defp bar_color("degraded"), do: "bg-warning"

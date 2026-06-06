@@ -605,8 +605,9 @@ defmodule TrackConn.Report do
     .subtitle { color: var(--muted); margin-top: 0; font-size: 1.02rem; }
     .generated { color: var(--muted); font-size: .9rem; }
     header { padding: 1.75rem 0 .25rem; }
-    section, footer { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
-           padding: 1.25rem 1.4rem; margin: 1rem 0; }
+    section, footer { background: linear-gradient(180deg, color-mix(in oklab, white 5%, transparent), transparent 55%), var(--card);
+           border: 1px solid var(--line); border-radius: var(--radius); padding: 1.25rem 1.4rem; margin: 1rem 0;
+           box-shadow: inset 0 1px 0 0 color-mix(in oklab, white 9%, transparent), 0 12px 32px -22px rgb(0 0 0 / .6); }
     .headline { font-size: 1.18rem; font-weight: 700; }
     .verdict.healthy .headline { color: var(--ok); }
     .verdict.degraded .headline { color: var(--warn); }
@@ -620,10 +621,10 @@ defmodule TrackConn.Report do
     .status-pill.degraded { background: var(--warn); color: #241400; }
     .status-pill.down { background: var(--bad); }
     .status-pill.unknown { background: #888; }
-    section.verdict { border-left: 4px solid var(--line); }
-    section.verdict.healthy { border-left-color: var(--ok); }
-    section.verdict.degraded { border-left-color: var(--warn); }
-    section.verdict.down { border-left-color: var(--bad); }
+    /* Status cue = a colored wash down from the top edge, not a left accent bar. */
+    section.verdict.healthy { background: linear-gradient(180deg, color-mix(in oklab, var(--ok) 14%, transparent), transparent 46%), var(--card); }
+    section.verdict.degraded { background: linear-gradient(180deg, color-mix(in oklab, var(--warn) 14%, transparent), transparent 46%), var(--card); }
+    section.verdict.down { background: linear-gradient(180deg, color-mix(in oklab, var(--bad) 16%, transparent), transparent 46%), var(--card); }
     .culprit { color: var(--muted); }
     table { width: 100%; border-collapse: collapse; margin: .6rem 0; font-size: .9rem; }
     th, td { text-align: left; padding: .5rem .55rem; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -656,7 +657,8 @@ defmodule TrackConn.Report do
       .no-print { display: none !important; }
       body { padding: 0; background: #fff; }
       header { padding: 0 0 .25rem; }
-      section, footer { border: none; border-radius: 0; padding: 0; margin: 1.25rem 0; background: #fff; page-break-inside: avoid; }
+      section, footer { border: none; border-radius: 0; padding: 0; margin: 1.25rem 0; background: #fff; box-shadow: none; page-break-inside: avoid; }
+      section.verdict.healthy, section.verdict.degraded, section.verdict.down { background: #fff; }
       h2 { border-bottom: 2px solid var(--line); page-break-after: avoid; }
       .status-pill.healthy, .status-pill.degraded { color: #fff; }
       tbody tr:hover { background: none; }
