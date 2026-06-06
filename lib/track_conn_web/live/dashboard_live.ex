@@ -112,9 +112,52 @@ defmodule TrackConnWeb.DashboardLive do
 
   @impl true
   def render(assigns) do
+    router = pseg(assigns.verdict, :router)
+    internet = pseg(assigns.verdict, :internet)
+    dns = pseg(assigns.verdict, :dns)
+    web = pseg(assigns.verdict, :web)
+    usable = combined_usable(dns, web)
+
+    # The pipeline: 4 nodes joined by 3 links. Each node takes the state of the
+    # link arriving at it, so the first non-green circle marks where it breaks.
+    nodes = [
+      %{label: "You", icon: "monitor", state: :healthy},
+      %{label: "Router", icon: "wifi", state: router.state},
+      %{label: "Your ISP", icon: "building-2", state: internet.state},
+      %{label: "Internet", icon: "globe", state: usable.state}
+    ]
+
+    links = [
+      %{seg: router, caption: "Local network"},
+      %{seg: internet, caption: "To the open internet"},
+      %{seg: usable, caption: "Names & sites"}
+    ]
+
+    segs_by_key = %{
+      router: router,
+      internet: internet,
+      dns: dns,
+      web: web,
+      usable: usable
+    }
+
+    expanded_seg =
+      case assigns.expanded && safe_existing_atom(assigns.expanded) do
+        nil -> nil
+        key -> Map.get(segs_by_key, key)
+      end
+
+    assigns =
+      assigns
+      |> assign(:nodes, nodes)
+      |> assign(:links, links)
+      |> assign(:segs_by_key, segs_by_key)
+      |> assign(:expanded_seg, expanded_seg)
+
     ~H"""
     <Layouts.app flash={@flash}>
-      <div class="max-w-4xl mx-auto space-y-6 pb-16">
+      <div class="space-y-5 pb-16">
+        <!-- Header -->
         <div class="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 class="text-2xl font-bold flex items-center gap-2">
@@ -125,6 +168,10 @@ defmodule TrackConnWeb.DashboardLive do
             </p>
           </div>
           <div class="flex items-center gap-2">
+            <span class={"badge badge-lg gap-1.5 #{verdict_badge(@verdict.status)}"}>
+              <span class="text-base leading-none">{status_emoji(@verdict.status)}</span>
+              {String.upcase(to_string(@verdict.status))}
+            </span>
             <button class="btn btn-sm" phx-click="toggle_monitor">
               <%= if @running do %>
                 <.lucide name="pause" class="size-4" /> Pause
@@ -149,162 +196,122 @@ defmodule TrackConnWeb.DashboardLive do
             </span>
           </div>
         <% end %>
-        
-    <!-- Hero verdict -->
-        <div class={"card shadow-lg border-2 #{hero_border(@verdict.status)}"}>
-          <div class="card-body items-center text-center gap-3">
-            <div class={"text-6xl #{pulse(@running)}"}>{status_emoji(@verdict.status)}</div>
-            <h2 class={"text-2xl font-bold #{status_text(@verdict.status)}"}>{@verdict.headline}</h2>
-            <p class="max-w-2xl opacity-80">{Map.get(@verdict, :detail)}</p>
+
+    <!-- PIPELINE HERO -->
+        <div class={"card shadow-lg border-2 overflow-hidden #{hero_border(@verdict.status)}"}>
+          <div class="card-body gap-5">
+            <!-- Verdict line -->
+            <div class="text-center space-y-2">
+              <h2 class={"text-2xl font-bold #{status_text(@verdict.status)}"}>
+                {@verdict.headline}
+              </h2>
+              <p class="max-w-2xl mx-auto text-sm opacity-80">{Map.get(@verdict, :detail)}</p>
+              <div class="badge badge-outline">
+                Likely cause: <span class="font-semibold ml-1">{culprit_label(@verdict.culprit)}</span>
+              </div>
+              <%= if Map.get(@verdict, :provisional?) and Map.get(@verdict, :samples, 0) > 0 do %>
+                <div class="text-xs opacity-50">
+                  Confirming — verdict based on {@verdict.samples} of 5 readings so far
+                </div>
+              <% end %>
+            </div>
+
+    <!-- The animated path -->
+            <div class="flex items-stretch gap-1 sm:gap-2 overflow-x-auto py-2">
+              <%= for {node, i} <- Enum.with_index(@nodes) do %>
+                <!-- Node -->
+                <div class="flex flex-col items-center gap-1.5 shrink-0 w-16 sm:w-20">
+                  <div class={"size-12 sm:size-14 rounded-full grid place-items-center border-2 bg-base-100 #{node_ring(node.state)} #{node_alert(node.state)}"}>
+                    <.lucide name={node.icon} class="size-6 sm:size-7" />
+                  </div>
+                  <span class="text-xs font-semibold text-center leading-tight">{node.label}</span>
+                </div>
+
+    <!-- Link (after every node except the last) -->
+                <%= if link = Enum.at(@links, i) do %>
+                  <button
+                    type="button"
+                    class="flex-1 min-w-[3rem] flex flex-col items-center justify-center gap-1.5 px-1 group cursor-pointer"
+                    phx-click="toggle_segment"
+                    phx-value-key={link.seg.key}
+                    title="Click for the raw measurement"
+                  >
+                    <span class={"text-xs font-mono font-semibold #{status_text(link.seg.state)}"}>
+                      {link_latency(link.seg)}
+                    </span>
+                    <span class={"tc-link h-1.5 w-full rounded-full #{link_color(link.seg.state)} #{not @running && "tc-link-paused"}"}>
+                    </span>
+                    <span class="text-[10px] uppercase tracking-wide opacity-50 text-center leading-tight group-hover:opacity-80">
+                      {link.caption}
+                    </span>
+                  </button>
+                <% end %>
+              <% end %>
+            </div>
+
+    <!-- Expanded raw measurement (the proof) -->
+            <%= if @expanded_seg do %>
+              <div class="border-t border-base-300 pt-3 text-xs">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="font-semibold opacity-70">
+                    {@expanded_seg.label} — raw measurement (the proof)
+                  </span>
+                  <span class={"font-mono #{status_text(@expanded_seg.state)}"}>{@expanded_seg.summary}</span>
+                </div>
+                <%= if @expanded_seg.key == :usable do %>
+                  <pre class="bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{@segs_by_key.dns.raw}
+    {@segs_by_key.web.raw}</pre>
+                <% else %>
+                  <pre class="bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{@expanded_seg.raw}</pre>
+                <% end %>
+              </div>
+            <% end %>
+
             <%= if action = Map.get(@verdict, :action) do %>
-              <div class="alert alert-warning max-w-2xl text-sm mt-1">
+              <div class="alert alert-warning text-sm">
                 <span><strong>What to do:</strong> {action}</span>
               </div>
             <% end %>
-            <div class="badge badge-outline mt-1">
-              Likely cause: <span class="font-semibold ml-1">{culprit_label(@verdict.culprit)}</span>
-            </div>
-            <%= if Map.get(@verdict, :provisional?) and Map.get(@verdict, :samples, 0) > 0 do %>
-              <div class="text-xs opacity-50">
-                Confirming — verdict based on {@verdict.samples} of 5 readings so far
-              </div>
-            <% end %>
           </div>
         </div>
-        
-    <!-- The ladder -->
-        <div>
-          <h3 class="text-sm font-semibold uppercase opacity-60 mb-2">
-            The path from you to the internet
-          </h3>
-          <div class="space-y-2">
-            <%= for seg <- @verdict.segments do %>
-              <div class={"card card-compact border #{seg_border(seg.state)}"}>
-                <div
-                  class="card-body cursor-pointer"
-                  phx-click="toggle_segment"
-                  phx-value-key={seg.key}
-                >
-                  <div class="flex items-center justify-between gap-3">
-                    <div class="flex items-center gap-3 min-w-0">
-                      <span class="text-2xl">{state_dot(seg.state)}</span>
-                      <div class="min-w-0">
-                        <div class="font-semibold truncate">{seg.label}</div>
-                        <div class="text-xs opacity-60 truncate">
-                          {seg.target} · {seg.about}
-                        </div>
-                      </div>
-                    </div>
-                    <div class="text-right shrink-0">
-                      <div class={"font-mono font-semibold #{status_text(seg.state)}"}>
-                        {seg.summary}
-                      </div>
-                      <div class="text-xs opacity-50">{String.upcase(to_string(seg.state))}</div>
-                      <%= for line <- [stability_readout(@stability, seg)], line != nil do %>
-                        <div
-                          class="text-xs font-mono opacity-60 mt-0.5"
-                          title="Continuous sampling (~5×/sec) between the 5s checks. Jitter is RTT steadiness; p99 and spikes are brief lag bursts the smoothed verdict hides. These are what cause in-game stutter even when the average looks fine."
-                        >
-                          {line}
-                        </div>
-                      <% end %>
-                    </div>
-                  </div>
 
-                  <%= if to_string(seg.key) == @expanded do %>
-                    <div class="mt-3 pt-3 border-t border-base-300 text-xs">
-                      <div class="font-semibold opacity-70 mb-1">Raw measurement (the proof):</div>
-                      <pre class="bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{seg.raw}</pre>
-                    </div>
+    <!-- BENTO GRID -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- Stability -->
+          <div class="card border border-base-300">
+            <div class="card-body gap-3">
+              <h3 class="text-xs font-semibold uppercase opacity-60 flex items-center gap-1.5">
+                <.lucide name="activity" class="size-4" /> Live stability
+              </h3>
+              <%= for {key, name} <- [internet: "Internet", router: "Router"] do %>
+                <div>
+                  <div class="text-xs font-semibold opacity-70 mb-1">{name}</div>
+                  <%= case @stability[key] do %>
+                    <% %{sample_count: n} = st when n > 0 -> %>
+                      <div class="grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-xs">
+                        <div class="flex justify-between"><span class="opacity-50">jitter</span><span>{fmt_ms(st.jitter_ms)}</span></div>
+                        <div class="flex justify-between"><span class="opacity-50">p99</span><span>{fmt_ms(st.p99_ms)}</span></div>
+                        <div class="flex justify-between"><span class="opacity-50">spikes</span><span>{st.spike_count}</span></div>
+                        <div class="flex justify-between"><span class="opacity-50">loss</span><span>{fmt_pct(st.loss_pct)}</span></div>
+                      </div>
+                    <% _ -> %>
+                      <div class="text-xs opacity-40 font-mono">sampling…</div>
                   <% end %>
                 </div>
-              </div>
-            <% end %>
-          </div>
-        </div>
-        
-    <!-- Deep diagnostic (per-hop trace) -->
-        <div>
-          <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-            <h3 class="text-sm font-semibold uppercase opacity-60">
-              Deep diagnostic — per-hop trace to {@deep.target}
-            </h3>
-            <button
-              class="btn btn-sm btn-outline"
-              phx-click="run_deep"
-              disabled={@deep.status == :running or not @mtr_available}
-            >
-              <%= if @deep.status == :running do %>
-                <span class="loading loading-spinner loading-xs"></span> Tracing…
-              <% else %>
-                <.lucide name="route" class="size-4" /> Run deep diagnostic
               <% end %>
-            </button>
+              <p class="text-[10px] opacity-40 leading-snug">
+                ~5×/sec between checks. Jitter & spikes are what cause stutter even when the average looks fine.
+              </p>
+            </div>
           </div>
 
+    <!-- History -->
           <div class="card border border-base-300">
-            <div class="card-body">
-              <%= cond do %>
-                <% not @mtr_available -> %>
-                  <p class="text-sm opacity-70">
-                    The per-hop trace needs <code>mtr</code>. Install it: Linux <code>sudo apt install mtr</code>, macOS <code>brew install mtr</code>,
-                    Windows: use WinMTR.
-                  </p>
-                <% @deep.status == :idle -> %>
-                  <p class="text-sm opacity-70">
-                    Pinpoints the exact hop where latency or loss is introduced — and names
-                    your ISP's routers along the way. Takes ~15 seconds.
-                  </p>
-                <% @deep.status == :running -> %>
-                  <div class="flex items-center gap-3 text-sm opacity-80">
-                    <span class="loading loading-spinner loading-sm"></span>
-                    Tracing every hop to {@deep.target}… this takes ~15 seconds.
-                  </div>
-                <% @deep.status == :error -> %>
-                  <p class="text-sm text-error">Couldn't run the trace: {@deep.error}</p>
-                <% true -> %>
-                  {render_deep_report(assigns)}
-              <% end %>
-            </div>
-          </div>
-        </div>
-        
-    <!-- Export for your ISP -->
-        <div>
-          <h3 class="text-sm font-semibold uppercase opacity-60 mb-2">Save proof for your ISP</h3>
-          <div class="card border border-base-300">
-            <div class="card-body flex-row items-center justify-between flex-wrap gap-3">
-              <p class="text-sm opacity-70 max-w-md">
-                Hand a support rep something concrete: a timestamped report with the verdict, the
-                per-segment evidence, and your latest deep trace — plus the raw timeline and a log of
-                every spike caught between checks{spike_count_phrase(@spike_events)}.
-              </p>
-              <div class="flex items-center gap-2">
-                <a href="/report" target="_blank" rel="noopener" class="btn btn-sm btn-primary">
-                  <.lucide name="file-text" class="size-4" /> Open report (Save as PDF)
-                </a>
-                <a href="/report.csv" download class="btn btn-sm btn-outline">
-                  <.lucide name="download" class="size-4" /> Download CSV
-                </a>
-                <a href="/spikes.csv" download class="btn btn-sm btn-outline">
-                  <.lucide name="zap" class="size-4" /> Spike log{spike_count_badge(@spike_events)}
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-    <!-- History timeline -->
-        <div>
-          <h3 class="text-sm font-semibold uppercase opacity-60 mb-2">
-            Recent history
-            <span class="font-normal normal-case opacity-70">
-              · {@stats.healthy}/{@stats.total} healthy · {@stats.uptime}% uptime
-            </span>
-          </h3>
-          <div class="card border border-base-300">
-            <div class="card-body">
-              <div class="flex items-end gap-px h-16 overflow-hidden" title="oldest → newest">
+            <div class="card-body gap-3">
+              <h3 class="text-xs font-semibold uppercase opacity-60 flex items-center gap-1.5">
+                <.lucide name="bar-chart" class="size-4" /> Recent history
+              </h3>
+              <div class="flex items-end gap-px h-20 overflow-hidden" title="oldest → newest">
                 <%= for s <- Enum.reverse(@history) do %>
                   <div
                     class={"flex-1 min-w-[2px] rounded-sm #{bar_color(s.status)}"}
@@ -317,10 +324,78 @@ defmodule TrackConnWeb.DashboardLive do
                   <span class="text-sm opacity-50">Collecting data…</span>
                 <% end %>
               </div>
-              <div class="text-xs opacity-50 mt-1">
-                Bar height = internet latency · color = verdict · hover for details
+              <div class="flex items-baseline justify-between text-xs">
+                <span class="font-mono text-2xl font-bold">{@stats.uptime}%</span>
+                <span class="opacity-50">uptime · {@stats.healthy}/{@stats.total} healthy</span>
               </div>
             </div>
+          </div>
+
+    <!-- Save proof -->
+          <div class="card border border-base-300">
+            <div class="card-body gap-3">
+              <h3 class="text-xs font-semibold uppercase opacity-60 flex items-center gap-1.5">
+                <.lucide name="file-text" class="size-4" /> Save proof for your ISP
+              </h3>
+              <p class="text-xs opacity-60 leading-snug">
+                A timestamped report with the verdict, per-segment evidence, your latest trace, and every spike caught between checks{spike_count_phrase(@spike_events)}.
+              </p>
+              <div class="flex flex-col gap-2 mt-auto">
+                <a href="/report" target="_blank" rel="noopener" class="btn btn-sm btn-primary justify-start">
+                  <.lucide name="file-text" class="size-4" /> Open report (Save as PDF)
+                </a>
+                <a href="/report.csv" download class="btn btn-sm btn-outline justify-start">
+                  <.lucide name="download" class="size-4" /> Download CSV
+                </a>
+                <a href="/spikes.csv" download class="btn btn-sm btn-outline justify-start">
+                  <.lucide name="zap" class="size-4" /> Spike log{spike_count_badge(@spike_events)}
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+    <!-- Deep diagnostic (per-hop trace) -->
+        <div class="card border border-base-300">
+          <div class="card-body gap-3">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <h3 class="text-xs font-semibold uppercase opacity-60 flex items-center gap-1.5">
+                <.lucide name="route" class="size-4" /> Deep diagnostic — per-hop trace to {@deep.target}
+              </h3>
+              <button
+                class="btn btn-sm btn-outline"
+                phx-click="run_deep"
+                disabled={@deep.status == :running or not @mtr_available}
+              >
+                <%= if @deep.status == :running do %>
+                  <span class="loading loading-spinner loading-xs"></span> Tracing…
+                <% else %>
+                  <.lucide name="route" class="size-4" /> Run deep diagnostic
+                <% end %>
+              </button>
+            </div>
+
+            <%= cond do %>
+              <% not @mtr_available -> %>
+                <p class="text-sm opacity-70">
+                  The per-hop trace needs <code>mtr</code>. Install it: Linux <code>sudo apt install mtr</code>, macOS <code>brew install mtr</code>,
+                  Windows: use WinMTR.
+                </p>
+              <% @deep.status == :idle -> %>
+                <p class="text-sm opacity-70">
+                  Pinpoints the exact hop where latency or loss is introduced — and names
+                  your ISP's routers along the way. Takes ~15 seconds.
+                </p>
+              <% @deep.status == :running -> %>
+                <div class="flex items-center gap-3 text-sm opacity-80">
+                  <span class="loading loading-spinner loading-sm"></span>
+                  Tracing every hop to {@deep.target}… this takes ~15 seconds.
+                </div>
+              <% @deep.status == :error -> %>
+                <p class="text-sm text-error">Couldn't run the trace: {@deep.error}</p>
+              <% true -> %>
+                {render_deep_report(assigns)}
+            <% end %>
           </div>
         </div>
 
@@ -384,6 +459,28 @@ defmodule TrackConnWeb.DashboardLive do
   defp lucide_paths("zap"),
     do:
       ~S(<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>)
+
+  defp lucide_paths("monitor"),
+    do:
+      ~S(<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>)
+
+  defp lucide_paths("wifi"),
+    do:
+      ~S(<path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.859a10 10 0 0 1 14 0"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/>)
+
+  defp lucide_paths("building-2"),
+    do:
+      ~S(<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>)
+
+  defp lucide_paths("globe"),
+    do:
+      ~S(<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>)
+
+  defp lucide_paths("activity"),
+    do: ~S(<path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/>)
+
+  defp lucide_paths("bar-chart"),
+    do: ~S(<line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/>)
 
   defp lucide_paths(_), do: ""
 
@@ -466,24 +563,6 @@ defmodule TrackConnWeb.DashboardLive do
     :exit, _ -> nil
   end
 
-  # The continuous jitter/spike line for a ping segment. Prefers the live
-  # high-rate stats; until the first burst lands (or if monitoring is off) it
-  # falls back to the per-sweep burst metrics. Returns nil for non-ping segments.
-  defp stability_readout(stability, %{key: key, metrics: metrics})
-       when key in [:router, :internet] do
-    case stability[key] do
-      %{sample_count: n} = st when n > 0 ->
-        "jitter #{fmt_ms(st.jitter_ms)} · p99 #{fmt_ms(st.p99_ms)} · spikes #{st.spike_count} · loss #{fmt_pct(st.loss_pct)}"
-
-      _ ->
-        if is_number(metrics[:jitter_ms]) or is_number(metrics[:max_rtt_ms]) do
-          "jitter #{fmt_ms(metrics[:jitter_ms])} · spike #{fmt_ms(metrics[:max_rtt_ms])}"
-        end
-    end
-  end
-
-  defp stability_readout(_stability, _seg), do: nil
-
   defp fmt_pct(n) when is_number(n), do: "#{Float.round(n / 1, 1)}%"
   defp fmt_pct(_), do: "—"
 
@@ -496,6 +575,76 @@ defmodule TrackConnWeb.DashboardLive do
   defp fmt_ms(nil), do: "—"
   defp fmt_ms(n) when is_number(n), do: "#{Float.round(n / 1, 1)}ms"
   defp fmt_ms(_), do: "—"
+
+  # --- pipeline helpers ---------------------------------------------------
+
+  # Look up a segment by key, with a safe placeholder if it isn't present yet
+  # (e.g. before the first sweep).
+  defp pseg(verdict, key) do
+    Enum.find(verdict.segments, &(&1.key == key)) ||
+      %{
+        key: key,
+        label: to_string(key),
+        about: nil,
+        target: nil,
+        state: :unknown,
+        summary: "no data yet",
+        metrics: %{},
+        raw: nil
+      }
+  end
+
+  # The final "can you actually use it" link folds DNS + page-load into one node
+  # boundary (the Internet). State is the worse of the two; latency shows the
+  # most user-relevant number (page load), falling back to DNS.
+  defp combined_usable(dns, web) do
+    state = worst_state([dns.state, web.state])
+
+    %{
+      key: :usable,
+      label: "Names & sites (DNS + page load)",
+      state: state,
+      summary: "DNS #{dns.summary} · page #{web.summary}",
+      metrics: %{rtt_ms: web.metrics[:ms] || dns.metrics[:ms]},
+      raw: nil
+    }
+  end
+
+  defp worst_state(states) do
+    cond do
+      :down in states -> :down
+      :degraded in states -> :degraded
+      Enum.any?(states, &(&1 == :unknown)) -> :unknown
+      true -> :healthy
+    end
+  end
+
+  defp link_latency(%{metrics: m}), do: fmt_ms(m[:rtt_ms])
+
+  defp safe_existing_atom(str) do
+    String.to_existing_atom(str)
+  rescue
+    ArgumentError -> nil
+  end
+
+  defp link_color(:healthy), do: "text-success"
+  defp link_color(:degraded), do: "text-warning"
+  defp link_color(:down), do: "text-error"
+  defp link_color(_), do: "text-base-content/25"
+
+  defp node_ring(:healthy), do: "border-success text-success"
+  defp node_ring(:degraded), do: "border-warning text-warning"
+  defp node_ring(:down), do: "border-error text-error"
+  defp node_ring(_), do: "border-base-300 opacity-60"
+
+  # Pulse the ring only where something is actually wrong, to draw the eye.
+  defp node_alert(state) when state in [:degraded, :down], do: "tc-node-alert"
+  defp node_alert(_), do: ""
+
+  defp verdict_badge(:healthy), do: "badge-success"
+  defp verdict_badge(:degraded), do: "badge-warning"
+  defp verdict_badge(:down), do: "badge-error"
+  defp verdict_badge(_), do: "badge-ghost"
 
   # --- view helpers -------------------------------------------------------
 
@@ -519,18 +668,10 @@ defmodule TrackConnWeb.DashboardLive do
   defp hero_border(:down), do: "border-error"
   defp hero_border(_), do: "border-base-300"
 
-  defp seg_border(:healthy), do: "border-success/40"
-  defp seg_border(:degraded), do: "border-warning/60"
-  defp seg_border(:down), do: "border-error/60"
-  defp seg_border(_), do: "border-base-300"
-
   defp bar_color("healthy"), do: "bg-success"
   defp bar_color("degraded"), do: "bg-warning"
   defp bar_color("down"), do: "bg-error"
   defp bar_color(_), do: "bg-base-300"
-
-  defp pulse(true), do: "animate-pulse"
-  defp pulse(false), do: ""
 
   defp culprit_label(:none), do: "Nothing — all healthy"
   defp culprit_label(:local), do: "Your local network / router"

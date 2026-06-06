@@ -103,3 +103,51 @@
 [data-phx-session], [data-phx-teleported-src] { display: contents }
 
 /* This file is for your main application CSS */
+
+/* --- Connection pipeline ("data flowing" animated links) ------------------
+   Each link is a thin bar whose dashed pattern slides left→right, so traffic
+   visibly flows from You toward the Internet. Color is set via text-* on the
+   element (the gradient uses currentColor), so health = link color. */
+@keyframes tc-flow {
+  to {
+    background-position: 1rem 0;
+  }
+}
+
+.tc-link {
+  background-image: linear-gradient(
+    90deg,
+    currentColor 0 45%,
+    color-mix(in oklab, currentColor 18%, transparent) 45% 100%
+  );
+  background-size: 1rem 100%;
+  animation: tc-flow 0.8s linear infinite;
+}
+
+/* When monitoring is paused, freeze the flow and dim it. */
+.tc-link-paused {
+  animation: none;
+  opacity: 0.35;
+}
+
+/* A soft pulse for the node ring that marks where a problem begins. */
+@keyframes tc-node-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, currentColor 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in oklab, currentColor 0%, transparent);
+  }
+}
+
+.tc-node-alert {
+  animation: tc-node-pulse 1.6s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tc-link,
+  .tc-node-alert {
+    animation: none;
+  }
+}
