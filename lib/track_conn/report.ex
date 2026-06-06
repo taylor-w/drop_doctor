@@ -214,10 +214,16 @@ defmodule TrackConn.Report do
     """
   end
 
+  # The dashboard's satellite-dish lucide icon (lucide.dev, ISC), inlined so the
+  # report stays a single self-contained document.
+  defp logo_svg do
+    ~s(<svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10a7.31 7.31 0 0 0 10 10Z"/><path d="m9 15 3-3"/><path d="M17 13a6 6 0 0 0-6-6"/><path d="M21 13A10 10 0 0 0 11 3"/></svg>)
+  end
+
   defp header_section(report) do
     """
     <header>
-      <h1>📡 track_conn — Connection report</h1>
+      <h1>#{logo_svg()} track_conn — Connection report</h1>
       <p class="subtitle">Is the problem your equipment, your DNS, or your ISP? This report is the timestamped proof.</p>
       <p class="generated">Generated <strong>#{esc(human_time(report.generated_at))}</strong> (UTC) · #{esc(span_line(report.stats))}</p>
     </header>
@@ -597,7 +603,8 @@ defmodule TrackConn.Report do
            background: radial-gradient(ellipse 70% 40% at 50% -5%, color-mix(in oklab, var(--primary) 22%, transparent), transparent 70%), var(--bg);
            background-attachment: fixed; min-height: 100vh; }
     main { max-width: 54rem; margin: 0 auto; }
-    h1 { font-size: 1.9rem; margin: 0 0 .25rem; letter-spacing: -.02em; }
+    h1 { font-size: 1.9rem; margin: 0 0 .25rem; letter-spacing: -.02em; display: flex; align-items: center; gap: .55rem; }
+    .logo { width: 1.7rem; height: 1.7rem; flex: none; color: var(--primary); }
     h2 { font-size: 1.15rem; margin: 0 0 .75rem; letter-spacing: -.01em; padding-bottom: .5rem; border-bottom: 1px solid var(--line); }
     h3 { font-size: 1rem; margin: 1.1rem 0 .4rem; }
     p { margin: .45rem 0; }
