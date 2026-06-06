@@ -152,6 +152,28 @@
   }
 }
 
+/* --- Page atmosphere -------------------------------------------------------
+   A top glow + faint dot-grid behind everything, so the wide-screen margins
+   read as intentional canvas instead of empty void. */
+body {
+  background-color: var(--color-base-200);
+  background-image:
+    radial-gradient(
+      ellipse 60% 50% at 50% -5%,
+      color-mix(in oklab, var(--color-primary) 14%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      color-mix(in oklab, var(--color-base-content) 5%, transparent) 1px,
+      transparent 1px
+    );
+  background-size:
+    100% 100%,
+    24px 24px;
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
 /* --- Panel depth -----------------------------------------------------------
    Instead of flat borders or an accent bar, cards get real elevation: a faint
    top sheen, a 1px top highlight, and a soft drop shadow. Crafted, not flat. */

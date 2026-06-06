@@ -600,7 +600,11 @@ defmodule TrackConn.Report do
     * { box-sizing: border-box; }
     body { font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; color: var(--ink);
            margin: 0; padding: 0 1.25rem 4rem; line-height: 1.55;
-           background: radial-gradient(ellipse 70% 40% at 50% -5%, color-mix(in oklab, var(--primary) 22%, transparent), transparent 70%), var(--bg);
+           background-color: var(--bg);
+           background-image:
+             radial-gradient(ellipse 70% 40% at 50% -5%, color-mix(in oklab, var(--primary) 22%, transparent), transparent 70%),
+             radial-gradient(color-mix(in oklab, var(--ink) 5%, transparent) 1px, transparent 1px);
+           background-size: 100% 100%, 24px 24px;
            background-attachment: fixed; min-height: 100vh; }
     main { max-width: 54rem; margin: 0 auto; }
     h1 { font-size: 1.9rem; margin: 0 0 .25rem; letter-spacing: -.02em; display: flex; align-items: center; gap: .55rem; }
