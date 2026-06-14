@@ -66,8 +66,8 @@ defmodule TrackConnWeb.Layouts do
   def flash_group(assigns) do
     ~H"""
     <div id={@id} aria-live="polite">
-      <.flash kind={:info} flash={@flash} />
-      <.flash kind={:error} flash={@flash} />
+      <.flash kind={:info} flash={@flash} autohide />
+      <.flash kind={:error} flash={@flash} autohide />
 
       <.flash
         id="client-error"

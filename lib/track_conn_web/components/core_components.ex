@@ -49,6 +49,7 @@ defmodule TrackConnWeb.CoreComponents do
   attr :flash, :map, default: %{}, doc: "the map of flash messages to display"
   attr :title, :string, default: nil
   attr :kind, :atom, values: [:info, :error], doc: "used for styling and flash lookup"
+  attr :autohide, :boolean, default: false, doc: "fade the toast out on its own after 10s"
   attr :rest, :global, doc: "the arbitrary HTML attributes to add to the flash container"
 
   slot :inner_block, doc: "the optional inner block that renders the flash message"
@@ -61,17 +62,18 @@ defmodule TrackConnWeb.CoreComponents do
       :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
       id={@id}
       phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
+      phx-hook={@autohide && ".AutoDismissFlash"}
       role="alert"
       class="toast toast-top toast-end z-50"
       {@rest}
     >
       <div class={[
-        "alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap",
-        @kind == :info && "alert-info",
-        @kind == :error && "alert-error"
+        "alert tc-toast w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap",
+        @kind == :info && "tc-toast-info",
+        @kind == :error && "tc-toast-error"
       ]}>
-        <.icon :if={@kind == :info} name="hero-information-circle" class="size-5 shrink-0" />
-        <.icon :if={@kind == :error} name="hero-exclamation-circle" class="size-5 shrink-0" />
+        <.icon :if={@kind == :info} name="hero-information-circle" class="tc-toast-icon size-5 shrink-0" />
+        <.icon :if={@kind == :error} name="hero-exclamation-circle" class="tc-toast-icon size-5 shrink-0" />
         <div>
           <p :if={@title} class="font-semibold">{@title}</p>
           <p>{msg}</p>
@@ -82,6 +84,18 @@ defmodule TrackConnWeb.CoreComponents do
         </button>
       </div>
     </div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".AutoDismissFlash">
+      export default {
+        mounted() {
+          // Let the toast breathe for 10s, then trigger its own phx-click —
+          // reusing the manual-dismiss path so it fades out and clears server-side.
+          this.timer = setTimeout(() => this.el.click(), 10000)
+        },
+        destroyed() {
+          clearTimeout(this.timer)
+        }
+      }
+    </script>
     """
   end
 

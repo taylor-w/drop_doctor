@@ -217,6 +217,153 @@ body {
   border-color: var(--color-primary);
 }
 
+/* --- Toast / flash: on-theme glass, not daisyUI's loud fill -----------------
+   Same elevated-glass language as the panels (.tc-panel): a frosted base, a
+   1px top highlight, and a soft drop shadow — with a faint per-kind tint so
+   info vs. error still read at a glance. Auto-fades after 10s via a hook. */
+.tc-toast {
+  border: 1px solid var(--color-base-300);
+  background-color: color-mix(in oklab, var(--color-base-100) 86%, transparent);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklab, white 5%, transparent),
+    transparent 55%
+  );
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklab, white 9%, transparent),
+    0 16px 40px -24px rgb(0 0 0 / 0.7);
+  color: var(--color-base-content);
+}
+.tc-toast-info {
+  border-color: color-mix(in oklab, var(--color-info) 40%, var(--color-base-300));
+  background-color: color-mix(in oklab, var(--color-info) 7%, var(--color-base-100));
+}
+.tc-toast-error {
+  border-color: color-mix(in oklab, var(--color-error) 40%, var(--color-base-300));
+  background-color: color-mix(in oklab, var(--color-error) 7%, var(--color-base-100));
+}
+.tc-toast-info .tc-toast-icon {
+  color: var(--color-info);
+}
+.tc-toast-error .tc-toast-icon {
+  color: var(--color-error);
+}
+
+/* --- Expanded timeline: light-mode legibility & glass ----------------------
+   The modal and chart are tuned for the dark canvas: translucent fills, a faint
+   grid, and a crisp base-300 edge that blends into the dark. On a light page
+   the fills wash out, the lines/text go faint, and that edge turns into a hard
+   gray line. So in light mode only we (a) frost the modal like the dark glass
+   panel — translucent fill, soft feathered border, big diffuse shadow — over a
+   blurred veil so it reads as one seamless surface, and (b) deepen the grid,
+   the dashed router line, and the muted labels so everything stays legible.
+   Dark is left exactly as-is. Both branches below cover an explicit light theme
+   and a system-following user on a light OS (no data-theme attribute). */
+[data-theme="light"] .tl-band {
+  fill-opacity: 0.3;
+}
+[data-theme="light"] .tl-marker {
+  fill-opacity: 0.26;
+}
+[data-theme="light"] .tl-grid {
+  color: color-mix(in oklab, var(--color-base-content) 28%, transparent);
+}
+[data-theme="light"] .tl-router {
+  color: color-mix(in oklab, var(--color-base-content) 70%, transparent);
+}
+[data-theme="light"] .tl-muted {
+  opacity: 0.8;
+}
+[data-theme="light"] .tl-overlay {
+  background-color: color-mix(in oklab, var(--color-base-content) 16%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+[data-theme="light"] .tl-modal {
+  background-color: color-mix(in oklab, var(--color-base-100) 78%, transparent);
+  border-color: color-mix(in oklab, var(--color-base-content) 9%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(118%);
+  backdrop-filter: blur(20px) saturate(118%);
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklab, white 70%, transparent),
+    0 24px 60px -28px rgb(0 0 0 / 0.4);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .tl-band {
+    fill-opacity: 0.3;
+  }
+  :root:not([data-theme]) .tl-marker {
+    fill-opacity: 0.26;
+  }
+  :root:not([data-theme]) .tl-grid {
+    color: color-mix(in oklab, var(--color-base-content) 28%, transparent);
+  }
+  :root:not([data-theme]) .tl-router {
+    color: color-mix(in oklab, var(--color-base-content) 70%, transparent);
+  }
+  :root:not([data-theme]) .tl-muted {
+    opacity: 0.8;
+  }
+  :root:not([data-theme]) .tl-overlay {
+    background-color: color-mix(in oklab, var(--color-base-content) 16%, transparent);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+  :root:not([data-theme]) .tl-modal {
+    background-color: color-mix(in oklab, var(--color-base-100) 78%, transparent);
+    border-color: color-mix(in oklab, var(--color-base-content) 9%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(118%);
+    backdrop-filter: blur(20px) saturate(118%);
+    box-shadow:
+      inset 0 1px 0 0 color-mix(in oklab, white 70%, transparent),
+      0 24px 60px -28px rgb(0 0 0 / 0.4);
+  }
+}
+
+/* Dark gets the same crafted glass, but the surface is near-opaque so it reads
+   as a solid elevated panel — not a see-through sheet washed out by the dim
+   page behind it. Soft border, deep diffuse shadow, faint top sheen, and a
+   light frost (the small translucency the blur acts on). Mirrors the light
+   block; covers an explicit dark theme and a system user on a dark OS. */
+[data-theme="dark"] .tl-overlay {
+  background-color: rgb(0 0 0 / 0.62);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+[data-theme="dark"] .tl-modal {
+  background-color: color-mix(in oklab, var(--color-base-100) 93%, transparent);
+  border-color: color-mix(in oklab, var(--color-base-content) 14%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  backdrop-filter: blur(20px) saturate(120%);
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklab, white 10%, transparent),
+    0 24px 60px -26px rgb(0 0 0 / 0.75);
+}
+[data-theme="dark"] .tl-muted {
+  opacity: 0.72;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .tl-overlay {
+    background-color: rgb(0 0 0 / 0.62);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
+  :root:not([data-theme]) .tl-modal {
+    background-color: color-mix(in oklab, var(--color-base-100) 93%, transparent);
+    border-color: color-mix(in oklab, var(--color-base-content) 14%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(120%);
+    backdrop-filter: blur(20px) saturate(120%);
+    box-shadow:
+      inset 0 1px 0 0 color-mix(in oklab, white 10%, transparent),
+      0 24px 60px -26px rgb(0 0 0 / 0.75);
+  }
+  :root:not([data-theme]) .tl-muted {
+    opacity: 0.72;
+  }
+}
+
 /* --- Stream-safe privacy ---------------------------------------------------
    Mark personal/identifying values with .tc-secret; a data-privacy attribute on
    <html> hides them. Pure CSS, so it applies to elements LiveView adds later

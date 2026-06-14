@@ -506,8 +506,8 @@ defmodule TrackConnWeb.DashboardLive do
       phx-window-keydown="close_timeline"
       phx-key="Escape"
     >
-      <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" phx-click="close_timeline"></div>
-      <div class="relative card border border-base-300 tc-panel w-full max-w-5xl max-h-[90vh] overflow-auto">
+      <div class="tl-overlay absolute inset-0 bg-black/60 backdrop-blur-sm" phx-click="close_timeline"></div>
+      <div class="tl-modal relative card border border-base-300 tc-panel w-full max-w-5xl max-h-[90vh] overflow-auto">
         <div class="card-body gap-4">
           <div class="flex items-center justify-between gap-2 flex-wrap">
             <h3 class="text-sm font-semibold flex items-center gap-2">
@@ -533,7 +533,7 @@ defmodule TrackConnWeb.DashboardLive do
             </div>
           </div>
 
-          <p class="text-xs opacity-60 max-w-2xl">
+          <p class="tl-muted text-xs opacity-60 max-w-2xl">
             Each point is one 5-second sweep — newest on the right, older to the left.
             <strong>Drag right</strong>
             to scroll back through the past (older events slide in from the left); drag left to return toward now. The amber band is the latency your
@@ -543,7 +543,7 @@ defmodule TrackConnWeb.DashboardLive do
           </p>
 
           <%= if @timeline_rows == [] do %>
-            <div class="h-64 grid place-items-center text-sm opacity-50">
+            <div class="tl-muted h-64 grid place-items-center text-sm opacity-50">
               No history yet — collecting data…
             </div>
           <% else %>
@@ -563,11 +563,11 @@ defmodule TrackConnWeb.DashboardLive do
                 style={"touch-action: none; aspect-ratio: #{@tl.w} / #{@tl.h}"}
               >
               </div>
-              <span class="absolute top-0 left-1 text-[10px] opacity-50 font-mono pointer-events-none">{round(@tl.max)}ms</span>
-              <span class="absolute bottom-0 left-1 text-[10px] opacity-50 font-mono pointer-events-none">0ms</span>
+              <span class="tl-muted absolute top-0 left-1 text-[10px] opacity-50 font-mono pointer-events-none">{round(@tl.max)}ms</span>
+              <span class="tl-muted absolute bottom-0 left-1 text-[10px] opacity-50 font-mono pointer-events-none">0ms</span>
             </div>
 
-            <div class="flex justify-between text-[10px] opacity-50 font-mono">
+            <div class="tl-muted flex justify-between text-[10px] opacity-50 font-mono">
               <span>older · {fmt_time(@tl.first_at)}</span>
               <span>{@tl.n} sweeps · ~{@tl.minutes} min</span>
               <span>{fmt_time(@tl.last_at)} · newer</span>
@@ -693,16 +693,16 @@ defmodule TrackConnWeb.DashboardLive do
             const { w, h, pad } = d
             const gy = (f) => h - pad - f * (h - 2 * pad)
             const grid = [0, 0.5, 1].map((f) =>
-              `<line x1="0" x2="${w}" y1="${gy(f)}" y2="${gy(f)}" class="text-base-content/15" stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke"/>`
+              `<line x1="0" x2="${w}" y1="${gy(f)}" y2="${gy(f)}" class="tl-grid text-base-content/15" stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke"/>`
             ).join("")
             const marks = (d.markers || []).map((m) =>
-              `<rect x="${m.x - 1.5}" y="0" width="3" height="${h}" class="${m.status === "down" ? "text-error" : "text-warning"}" fill="currentColor" fill-opacity="0.14"/>`
+              `<rect x="${m.x - 1.5}" y="0" width="3" height="${h}" class="tl-marker ${m.status === "down" ? "text-error" : "text-warning"}" fill="currentColor" fill-opacity="0.14"/>`
             ).join("")
             this.content.innerHTML =
               `<svg viewBox="0 0 ${w} ${h}" class="w-full block" style="aspect-ratio:${w}/${h}">` +
                 grid + marks +
-                `<polygon class="text-warning" fill="currentColor" fill-opacity="0.16" stroke="none" points="${d.band}"/>` +
-                `<polyline class="text-base-content/40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" points="${d.router}"/>` +
+                `<polygon class="tl-band text-warning" fill="currentColor" fill-opacity="0.16" stroke="none" points="${d.band}"/>` +
+                `<polyline class="tl-router text-base-content/40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" points="${d.router}"/>` +
                 `<polyline class="text-primary" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" points="${d.internet}"/>` +
               `</svg>`
           }

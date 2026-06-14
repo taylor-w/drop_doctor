@@ -182,6 +182,7 @@ defmodule TrackConn.Report do
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>track_conn — ISP report (#{esc(iso8601(report.generated_at))})</title>
+    <script>#{theme_script()}</script>
     <style>#{styles()}</style>
     <script>#{view_controls_script()}</script>
     </head>
@@ -201,6 +202,36 @@ defmodule TrackConn.Report do
     </script>
     </body>
     </html>
+    """
+  end
+
+  # Match the dashboard's selected theme. The app stores its choice in
+  # localStorage["phx:theme"] (light | dark | absent = system); we read the same
+  # key and resolve "system" against the OS exactly as daisyUI does (dark theme
+  # is prefersdark). Runs in <head> before paint, so there's no flash. Print
+  # always forces a clean light palette via @media print regardless of this.
+  defp theme_script do
+    """
+    (() => {
+      try {
+        const stored = localStorage.getItem("phx:theme");
+        const mq = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)");
+        const resolve = () => (stored === "light" || stored === "dark")
+          ? stored : (mq && mq.matches ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", resolve());
+        // Follow the app live: OS flips (system mode) and toggles in the dashboard tab.
+        if (mq && stored !== "light" && stored !== "dark") {
+          mq.addEventListener("change", () => document.documentElement.setAttribute("data-theme", resolve()));
+        }
+        window.addEventListener("storage", (e) => {
+          if (e.key === "phx:theme") {
+            const v = e.newValue;
+            document.documentElement.setAttribute("data-theme",
+              (v === "light" || v === "dark") ? v : (mq && mq.matches ? "dark" : "light"));
+          }
+        });
+      } catch (_) { document.documentElement.setAttribute("data-theme", "dark"); }
+    })();
     """
   end
 
@@ -705,6 +736,25 @@ defmodule TrackConn.Report do
       --bad: oklch(67% 0.21 20);
       --radius: 0.75rem;
     }
+    /* Light theme — mirrors the dashboard's daisyUI "light" palette. Scoped to
+       @media screen so it never fights the print block's professional palette.
+       theme_script() sets data-theme on <html> to track the running app. */
+    @media screen {
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --bg: oklch(96% 0.001 286.375);
+        --card: oklch(98% 0 0);
+        --line: oklch(88% 0.004 286.32);
+        --ink: oklch(21% 0.006 285.885);
+        --muted: oklch(47% 0.018 286);
+        --primary: oklch(70% 0.213 47.604);
+        --ok: oklch(70% 0.14 182.503);
+        --warn: oklch(66% 0.179 58.318);
+        --bad: oklch(58% 0.253 17.585);
+      }
+      /* Links lighten the primary toward white on dark; darken it on light. */
+      :root[data-theme="light"] a { color: color-mix(in oklab, var(--primary) 78%, black); }
+    }
     * { box-sizing: border-box; }
     body { font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; color: var(--ink);
            margin: 0; padding: 0 1.25rem 4rem; line-height: 1.55;
@@ -774,8 +824,8 @@ defmodule TrackConn.Report do
     .toolbar { position: sticky; top: 0; z-index: 5; background: color-mix(in oklab, var(--bg) 82%, transparent);
                -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
                margin: 0 -1.25rem 1.5rem; padding: .7rem 1.25rem; display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
-    .toolbar > button, .toolbar > a { font: inherit; font-size: .9rem; font-weight: 600; padding: .4rem .9rem; border-radius: .5rem;
-               display: inline-flex; align-items: center; gap: .45rem;
+    .toolbar > button, .toolbar > a { font: inherit; font-size: .75rem; font-weight: 600; height: 2rem; padding: 0 .75rem; border-radius: .25rem;
+               display: inline-flex; align-items: center; line-height: 1; gap: .4rem;
                border: 1px solid color-mix(in oklab, var(--ink) 16%, transparent);
                background-color: color-mix(in oklab, var(--ink) 6%, transparent);
                background-image: linear-gradient(180deg, color-mix(in oklab, white 6%, transparent), transparent 60%);
