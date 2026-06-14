@@ -66,6 +66,12 @@ defmodule TrackConn.SpikeMonitor do
   def pause_all, do: Enum.each(@hosts, &pause/1)
   def resume_all, do: Enum.each(@hosts, &resume/1)
 
+  @doc "Drop the rolling sample buffer for one host (clean slate for live stats)."
+  def reset(key), do: GenServer.cast(server_name(key), :reset)
+
+  @doc "Reset every host monitor's live buffer — paired with a history wipe."
+  def reset_all, do: Enum.each(@hosts, &reset/1)
+
   @doc "The registered process name for a host key."
   def server_name(key), do: :"#{__MODULE__}.#{key}"
 
@@ -116,6 +122,16 @@ defmodule TrackConn.SpikeMonitor do
   @impl true
   def handle_cast(:pause, state), do: {:noreply, %{state | running: false}}
   def handle_cast(:resume, state), do: {:noreply, start_burst(%{state | running: true})}
+
+  # Clean slate: empty the rolling buffer, reset the adaptive rate to fast, and
+  # broadcast empty stats so any live view drops back to "sampling…".
+  def handle_cast(:reset, state) do
+    stats = Stability.empty()
+    Phoenix.PubSub.broadcast(TrackConn.PubSub, @topic, {:stability, state.key, stats})
+
+    {:noreply,
+     %{state | samples: [], stats: stats, calm_count: 0, interval: max(state.interval_floor, state.fast_interval)}}
+  end
 
   @impl true
   def handle_info(:burst, state), do: {:noreply, start_burst(state)}

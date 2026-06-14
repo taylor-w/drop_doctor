@@ -46,6 +46,20 @@ defmodule TrackConn.Measurements do
     |> Repo.all()
   end
 
+  @doc """
+  A panning window into history: `limit` sweeps ending `offset` sweeps back from
+  the newest, returned oldest-first (ready to chart). `offset: 0` is the live
+  edge (most recent); larger offsets scroll further into the past.
+  """
+  def window(limit, offset \\ 0) do
+    Sweep
+    |> order_by(desc: :inserted_at)
+    |> limit(^limit)
+    |> offset(^offset)
+    |> Repo.all()
+    |> Enum.reverse()
+  end
+
   @doc "Sweeps since `datetime`, oldest first — for charting a window."
   def since(datetime) do
     Sweep
@@ -74,6 +88,17 @@ defmodule TrackConn.Measurements do
 
   @doc "Total number of recorded spike events."
   def count_spike_events, do: Repo.aggregate(SpikeEvent, :count)
+
+  @doc """
+  Wipes *all* recorded history — every sweep and every spike event — for a clean
+  slate. Irreversible; the UI guards it behind a confirmation and an "export
+  first" nudge. Returns the total number of rows deleted.
+  """
+  def reset do
+    {sweeps, _} = Repo.delete_all(Sweep)
+    {events, _} = Repo.delete_all(SpikeEvent)
+    sweeps + events
+  end
 
   @doc """
   Deletes sweeps and spike events older than `max_age` seconds. Keeps the SQLite

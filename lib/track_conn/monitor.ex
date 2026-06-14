@@ -65,6 +65,13 @@ defmodule TrackConn.Monitor do
   @doc "The most recent deep trace report, or `nil` if none has been run."
   def latest_deep(server \\ __MODULE__), do: GenServer.call(server, :latest_deep)
 
+  @doc """
+  Clean slate: forget the in-memory smoothing window and the stashed deep trace.
+  Paired with `Measurements.reset/0` (which wipes the DB) so a reset doesn't
+  leave the next few verdicts smoothed over already-deleted history.
+  """
+  def reset(server \\ __MODULE__), do: GenServer.cast(server, :reset)
+
   # --- callbacks ----------------------------------------------------------
 
   @impl true
@@ -96,6 +103,11 @@ defmodule TrackConn.Monitor do
   def handle_cast(:sweep_now, state), do: {:noreply, start_sweep(state)}
 
   def handle_cast({:put_deep, report}, state), do: {:noreply, %{state | deep: report}}
+
+  # Clean slate: drop the smoothing window and stashed trace. The live verdict
+  # (`latest`) is kept so the banner keeps showing current health; it just goes
+  # provisional again for the next few sweeps as the window refills.
+  def handle_cast(:reset, state), do: {:noreply, %{state | window: [], deep: nil}}
 
   def handle_cast(:pause, state) do
     cancel_timer(state.timer)

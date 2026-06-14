@@ -10,6 +10,10 @@ defmodule TrackConnWeb.DashboardLive do
 
   alias TrackConn.{DeepDiagnostic, Measurements, Monitor, Net, SpikeMonitor, Targets}
 
+  # How many sweeps the expanded timeline shows at once. The window pans across
+  # the full recorded history (drag), anchored `tl_offset` sweeps back from now.
+  @tl_window 90
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
@@ -31,6 +35,9 @@ defmodule TrackConnWeb.DashboardLive do
      |> assign(:stats, stats(history))
      |> assign(:total_all, Measurements.count())
      |> assign(:expanded, nil)
+     |> assign(:timeline_open, false)
+     |> assign(:tl_offset, 0)
+     |> assign(:timeline_rows, [])
      |> assign(:stability, initial_stability())
      |> assign(:spike_events, Measurements.count_spike_events())
      |> assign(:deep, %{status: :idle, target: Targets.internet_target()})
@@ -48,7 +55,8 @@ defmodule TrackConnWeb.DashboardLive do
      |> assign(:history, history)
      |> assign(:stats, stats(history))
      |> assign(:total_all, total)
-     |> assign(:spike_events, Measurements.count_spike_events())}
+     |> assign(:spike_events, Measurements.count_spike_events())
+     |> refresh_timeline_on_sweep(row)}
   end
 
   # Continuous stability stats for one segment (router/internet) arrive ~0.5/s.
@@ -78,6 +86,47 @@ defmodule TrackConnWeb.DashboardLive do
   def handle_event("toggle_segment", %{"key" => key}, socket) do
     expanded = if socket.assigns.expanded == key, do: nil, else: key
     {:noreply, assign(socket, :expanded, expanded)}
+  end
+
+  def handle_event("open_timeline", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:timeline_open, true)
+     |> load_timeline(0)}
+  end
+
+  def handle_event("close_timeline", _params, socket),
+    do: {:noreply, assign(socket, :timeline_open, false)}
+
+  # Continuous drag-pan: the hook pushes the absolute target offset (sweeps back
+  # from now) as the cursor moves; `load_timeline` clamps it to the history.
+  def handle_event("pan_to", %{"offset" => offset}, socket) when is_integer(offset) do
+    {:noreply, load_timeline(socket, offset)}
+  end
+
+  # Relative step-pan (e.g. for keyboard/buttons): +steps scrolls back in time.
+  def handle_event("pan_timeline", %{"steps" => steps}, socket) when is_integer(steps) do
+    {:noreply, load_timeline(socket, socket.assigns.tl_offset + steps)}
+  end
+
+  def handle_event("jump_now", _params, socket),
+    do: {:noreply, load_timeline(socket, 0)}
+
+  def handle_event("clear_data", _params, socket) do
+    deleted = Measurements.reset()
+    Monitor.reset()
+    SpikeMonitor.reset_all()
+
+    {:noreply,
+     socket
+     |> assign(:history, [])
+     |> assign(:stats, stats([]))
+     |> assign(:total_all, 0)
+     |> assign(:spike_events, 0)
+     |> assign(:stability, initial_stability())
+     |> assign(:deep, %{status: :idle, target: Targets.internet_target()})
+     |> assign(:timeline_open, false)
+     |> put_flash(:info, "Cleared #{deleted} recorded row(s) — starting fresh.")}
   end
 
   def handle_event("run_deep", _params, socket) do
@@ -309,10 +358,25 @@ defmodule TrackConnWeb.DashboardLive do
     <!-- History -->
           <div class="card border border-base-300 tc-panel">
             <div class="card-body gap-3">
-              <h3 class="text-sm font-semibold flex items-center gap-2 pb-2 mb-1 border-b border-base-300">
-                <.lucide name="bar-chart" class="size-4" /> Recent history
+              <h3 class="text-sm font-semibold flex items-center justify-between gap-2 pb-2 mb-1 border-b border-base-300">
+                <span class="flex items-center gap-2">
+                  <.lucide name="bar-chart" class="size-4" /> Recent history
+                </span>
+                <button
+                  type="button"
+                  class="opacity-50 hover:opacity-100 transition-opacity"
+                  phx-click="open_timeline"
+                  title="Expand the timeline — router vs. ISP, side by side"
+                >
+                  <.lucide name="maximize-2" class="size-3.5" />
+                </button>
               </h3>
-              <div class="flex items-end gap-px h-20 overflow-hidden" title="oldest → newest">
+              <button
+                type="button"
+                class="flex items-end gap-px h-20 overflow-hidden w-full cursor-pointer"
+                title="Click to expand — see router vs. ISP over time"
+                phx-click="open_timeline"
+              >
                 <%= for s <- Enum.reverse(@history) do %>
                   <div
                     class={"flex-1 min-w-[2px] rounded-sm #{bar_color(s.status)}"}
@@ -324,7 +388,7 @@ defmodule TrackConnWeb.DashboardLive do
                 <%= if @history == [] do %>
                   <span class="text-sm opacity-50">Collecting data…</span>
                 <% end %>
-              </div>
+              </button>
               <div class="flex items-baseline justify-between text-xs">
                 <span class="font-mono text-2xl font-bold">{@stats.uptime}%</span>
                 <span class="opacity-50">uptime · {@stats.healthy}/{@stats.total} healthy</span>
@@ -351,6 +415,14 @@ defmodule TrackConnWeb.DashboardLive do
                 <a href="/spikes.csv" download class="btn btn-sm tc-btn justify-start">
                   <.lucide name="zap" class="size-4" /> Spike log{spike_count_badge(@spike_events)}
                 </a>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-ghost justify-start text-error/80 hover:text-error hover:bg-error/10"
+                  phx-click="clear_data"
+                  data-confirm="This permanently deletes all recorded sweeps and spike events for a clean slate. Download a CSV above first if you want to keep them. Continue?"
+                >
+                  <.lucide name="trash-2" class="size-4" /> Clear recorded data
+                </button>
               </div>
             </div>
           </div>
@@ -408,9 +480,350 @@ defmodule TrackConnWeb.DashboardLive do
           <% end %> · open source
         </p>
       </div>
+
+      <%= if @timeline_open do %>
+        {render_timeline(assigns)}
+      <% end %>
     </Layouts.app>
     """
   end
+
+  # --- expanded timeline (router vs. ISP over time) -----------------------
+
+  # SVG user-space dimensions. We keep the aspect ratio fixed (via CSS
+  # `aspect-ratio`) so nothing distorts, and use non-scaling strokes so lines
+  # stay crisp at any rendered size.
+  @tl_w 1000
+  @tl_h 320
+  @tl_pad 10
+
+  defp render_timeline(assigns) do
+    assigns = assign(assigns, :tl, timeline(assigns.timeline_rows))
+
+    ~H"""
+    <div
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+      phx-window-keydown="close_timeline"
+      phx-key="Escape"
+    >
+      <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" phx-click="close_timeline"></div>
+      <div class="relative card border border-base-300 tc-panel w-full max-w-5xl max-h-[90vh] overflow-auto">
+        <div class="card-body gap-4">
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <h3 class="text-sm font-semibold flex items-center gap-2">
+              <.lucide name="activity" class="size-4" /> Timeline — router vs. ISP latency
+            </h3>
+            <div class="flex items-center gap-2">
+              <%= if @tl_offset > 0 do %>
+                <span class="tc-badge text-warning">Viewing past</span>
+                <button type="button" class="btn btn-xs tc-btn" phx-click="jump_now">
+                  <.lucide name="refresh-cw" class="size-3" /> Jump to now
+                </button>
+              <% else %>
+                <span class="tc-badge text-success">● Live</span>
+              <% end %>
+              <button
+                type="button"
+                class="opacity-60 hover:opacity-100"
+                phx-click="close_timeline"
+                title="Close (Esc)"
+              >
+                <.lucide name="x" class="size-5" />
+              </button>
+            </div>
+          </div>
+
+          <p class="text-xs opacity-60 max-w-2xl">
+            Each point is one 5-second sweep — newest on the right, older to the left.
+            <strong>Drag right</strong>
+            to scroll back through the past (older events slide in from the left); drag left to return toward now. The amber band is the latency your
+            <strong>ISP adds beyond your router</strong>
+            — when it swells, the problem is past your equipment. A bump in <em>both</em>
+            lines at once is local (your machine or Wi-Fi), not your provider.
+          </p>
+
+          <%= if @timeline_rows == [] do %>
+            <div class="h-64 grid place-items-center text-sm opacity-50">
+              No history yet — collecting data…
+            </div>
+          <% else %>
+            <div class="relative">
+              <!-- The SVG inside is drawn and panned entirely by the hook; we mark
+                   it phx-update="ignore" so LiveView never fights the live drag
+                   transform. New data arrives as the data-series / data-offset
+                   attributes, which the hook reads on update. -->
+              <div
+                id="tl-pan"
+                phx-hook=".TimelinePan"
+                phx-update="ignore"
+                data-series={@tl.series}
+                data-offset={@tl_offset}
+                data-window={@tl.n}
+                class="overflow-hidden cursor-grab active:cursor-grabbing select-none block"
+                style={"touch-action: none; aspect-ratio: #{@tl.w} / #{@tl.h}"}
+              >
+              </div>
+              <span class="absolute top-0 left-1 text-[10px] opacity-50 font-mono pointer-events-none">{round(@tl.max)}ms</span>
+              <span class="absolute bottom-0 left-1 text-[10px] opacity-50 font-mono pointer-events-none">0ms</span>
+            </div>
+
+            <div class="flex justify-between text-[10px] opacity-50 font-mono">
+              <span>older · {fmt_time(@tl.first_at)}</span>
+              <span>{@tl.n} sweeps · ~{@tl.minutes} min</span>
+              <span>{fmt_time(@tl.last_at)} · newer</span>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+              <span class="flex items-center gap-1.5">
+                <span class="inline-block w-4 h-0.5 bg-primary"></span> Internet (total)
+              </span>
+              <span class="flex items-center gap-1.5">
+                <span class="inline-block w-4 h-0 border-t border-dashed border-base-content/50"></span> Router (local)
+              </span>
+              <span class="flex items-center gap-1.5">
+                <span class="inline-block w-3 h-2.5 bg-warning/30"></span> ISP added (internet − router)
+              </span>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".TimelinePan">
+        export default {
+          mounted() {
+            this.dragging = false
+            this.startX = 0
+            this.lastX = 0
+            this.dx = 0
+            this.startOffset = 0
+            this.lastPushed = null
+            this.raf = null
+
+            // The hook owns the SVG so LiveView's DOM patching never touches the
+            // live transform. We draw into our own child of the (ignored) root.
+            this.content = document.createElement("div")
+            this.content.style.willChange = "transform"
+            this.el.appendChild(this.content)
+            this.draw()
+
+            this.down = (e) => {
+              this.dragging = true
+              this.startX = e.clientX
+              this.lastX = e.clientX
+              this.dx = 0
+              this.startOffset = this.offset()
+              this.lastPushed = this.startOffset
+              this.content.style.transition = ""
+            }
+            this.move = (e) => {
+              if (!this.dragging) return
+              this.lastX = e.clientX
+              if (!this.raf) this.raf = requestAnimationFrame(() => this.frame())
+            }
+            this.up = () => {
+              if (!this.dragging) return
+              this.dragging = false
+              if (this.raf) { cancelAnimationFrame(this.raf); this.raf = null }
+              // Trailing sync: make sure the exact release position is loaded.
+              const desired = this.targetOffset()
+              if (desired !== this.lastPushed) {
+                this.lastPushed = desired
+                this.pushEvent("pan_to", { offset: desired })
+              }
+              this.dx = 0
+              // Settle the sub-step remainder back to the data's true position.
+              this.content.style.transition = "transform 0.12s ease-out"
+              this.content.style.transform = "translate3d(0,0,0)"
+            }
+
+            this.el.addEventListener("pointerdown", this.down)
+            window.addEventListener("pointermove", this.move)
+            window.addEventListener("pointerup", this.up)
+          },
+
+          // Fresh data (new offset/series) arrived from the server: redraw and,
+          // mid-drag, re-anchor the transform so the cursor stays glued to the data.
+          updated() {
+            this.draw()
+            if (this.dragging) this.applyTransform()
+          },
+
+          destroyed() {
+            window.removeEventListener("pointermove", this.move)
+            window.removeEventListener("pointerup", this.up)
+          },
+
+          offset() { return parseInt(this.el.dataset.offset) || 0 },
+          pps() { return this.el.clientWidth / (parseInt(this.el.dataset.window) || 1) },
+
+          // The history position the cursor currently points at. Grab-and-drag
+          // model: dragging RIGHT (dx > 0) pulls the strip right, revealing older
+          // events from the left (larger offset); dragging LEFT returns toward now.
+          targetOffset() {
+            const pps = this.pps()
+            return pps ? this.startOffset + Math.round(this.dx / pps) : this.startOffset
+          },
+
+          frame() {
+            this.raf = null
+            this.dx = this.lastX - this.startX
+            const desired = this.targetOffset()
+            // Load new data the instant the cursor crosses into the next sweep
+            // (capped at one push per animation frame), so past events stream in
+            // continuously instead of arriving in throttled chunks.
+            if (desired !== this.lastPushed) {
+              this.lastPushed = desired
+              this.pushEvent("pan_to", { offset: desired })
+            }
+            this.applyTransform()
+          },
+
+          // Grab-and-drag: the axis runs older(left) → now(right). Dragging RIGHT
+          // moves the chart RIGHT with your cursor, sliding older events in from
+          // the left. The transform follows the cursor and cancels the per-frame
+          // data shift, so the motion stays glued and never jitters.
+          applyTransform() {
+            const shifted = (this.offset() - this.startOffset) * this.pps()
+            this.content.style.transform = `translate3d(${this.dx - shifted}px,0,0)`
+          },
+
+          draw() {
+            const d = JSON.parse(this.el.dataset.series || "{}")
+            if (!d.internet) { this.content.innerHTML = ""; return }
+            const { w, h, pad } = d
+            const gy = (f) => h - pad - f * (h - 2 * pad)
+            const grid = [0, 0.5, 1].map((f) =>
+              `<line x1="0" x2="${w}" y1="${gy(f)}" y2="${gy(f)}" class="text-base-content/15" stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke"/>`
+            ).join("")
+            const marks = (d.markers || []).map((m) =>
+              `<rect x="${m.x - 1.5}" y="0" width="3" height="${h}" class="${m.status === "down" ? "text-error" : "text-warning"}" fill="currentColor" fill-opacity="0.14"/>`
+            ).join("")
+            this.content.innerHTML =
+              `<svg viewBox="0 0 ${w} ${h}" class="w-full block" style="aspect-ratio:${w}/${h}">` +
+                grid + marks +
+                `<polygon class="text-warning" fill="currentColor" fill-opacity="0.16" stroke="none" points="${d.band}"/>` +
+                `<polyline class="text-base-content/40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" points="${d.router}"/>` +
+                `<polyline class="text-primary" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" points="${d.internet}"/>` +
+              `</svg>`
+          }
+        }
+      </script>
+    </div>
+    """
+  end
+
+  # Load the timeline window at `offset` sweeps back from now, clamped to the
+  # bounds of the recorded history.
+  defp load_timeline(socket, offset) do
+    max_off = max(socket.assigns.total_all - @tl_window, 0)
+    offset = offset |> max(0) |> min(max_off)
+
+    socket
+    |> assign(:tl_offset, offset)
+    |> assign(:timeline_rows, Measurements.window(@tl_window, offset))
+  end
+
+  # On each new sweep while the timeline is open: the live edge (offset 0) tracks
+  # now; a panned-into-the-past view shifts one step older so it stays anchored to
+  # the same absolute moment instead of sliding under you.
+  defp refresh_timeline_on_sweep(%{assigns: %{timeline_open: false}} = socket, _row), do: socket
+
+  defp refresh_timeline_on_sweep(socket, row) do
+    bump = if socket.assigns.tl_offset > 0 and row, do: 1, else: 0
+    load_timeline(socket, socket.assigns.tl_offset + bump)
+  end
+
+  # Build everything the timeline SVG needs from the history rows (newest-first
+  # in the socket; charted oldest → newest, left → right).
+  defp timeline(history) do
+    # Oldest-first → plotted left-to-right, so the newest sweep sits on the right
+    # (now-on-right). `history` (the pan window) already arrives oldest-first.
+    rows = history
+    inet = Enum.map(rows, & &1.internet_rtt_ms)
+    rtr = Enum.map(rows, & &1.router_rtt_ms)
+    max = tl_max(inet ++ rtr)
+    n = length(rows)
+
+    internet = tl_points(inet, max, n)
+    router = tl_points(rtr, max, n)
+    band = tl_band(inet, rtr, max, n)
+    markers = tl_markers(rows, n)
+
+    %{
+      w: @tl_w,
+      h: @tl_h,
+      max: max,
+      n: n,
+      minutes: max(round(n * 5 / 60), 1),
+      first_at: tl_at(List.first(rows)),
+      last_at: tl_at(List.last(rows)),
+      # The SVG is drawn client-side (so panning stays smooth), so ship the
+      # precomputed geometry to the hook as JSON rather than rendering it here.
+      series:
+        Jason.encode!(%{
+          w: @tl_w,
+          h: @tl_h,
+          pad: @tl_pad,
+          internet: internet,
+          router: router,
+          band: band,
+          markers: markers
+        })
+    }
+  end
+
+  # Y-scale ceiling: the largest plotted value with 10% headroom, never below
+  # 50ms so a calm link doesn't get a misleadingly dramatic scale.
+  defp tl_max(vals) do
+    case Enum.filter(vals, &is_number/1) do
+      [] -> 50.0
+      nums -> max(Enum.max(nums) * 1.1, 50.0)
+    end
+  end
+
+  defp tl_points(values, max, n) do
+    values
+    |> Enum.with_index()
+    |> Enum.map_join(" ", fn {v, i} -> "#{r1(tl_x(i, n))},#{r1(tl_y(v, max))}" end)
+  end
+
+  # Polygon spanning internet (top, left→right) then router (bottom, right→left)
+  # — the filled area is the ISP's latency contribution over time.
+  defp tl_band(inet, rtr, max, n) do
+    top = inet |> Enum.with_index() |> Enum.map(fn {v, i} -> "#{r1(tl_x(i, n))},#{r1(tl_y(v, max))}" end)
+
+    bottom =
+      rtr
+      |> Enum.with_index()
+      |> Enum.map(fn {v, i} -> "#{r1(tl_x(i, n))},#{r1(tl_y(v, max))}" end)
+      |> Enum.reverse()
+
+    Enum.join(top ++ bottom, " ")
+  end
+
+  defp tl_markers(rows, n) do
+    rows
+    |> Enum.with_index()
+    |> Enum.filter(fn {s, _i} -> s.status != "healthy" end)
+    |> Enum.map(fn {s, i} -> %{x: r1(tl_x(i, n)), status: s.status} end)
+  end
+
+  defp tl_x(_i, n) when n <= 1, do: 0.0
+  defp tl_x(i, n), do: i / (n - 1) * @tl_w
+
+  # Missing RTT (e.g. a 100%-loss sweep) plots at the baseline; the red marker
+  # band drawn for that sweep is what flags it, not the line height.
+  defp tl_y(v, _max) when not is_number(v), do: @tl_h - @tl_pad
+
+  defp tl_y(v, max) do
+    frac = v |> Kernel./(max) |> min(1.0) |> max(0.0)
+    @tl_h - @tl_pad - frac * (@tl_h - 2 * @tl_pad)
+  end
+
+  defp tl_at(%{inserted_at: at}), do: at
+  defp tl_at(_), do: nil
+
+  defp r1(n), do: Float.round(n / 1, 1)
 
   # Inline Lucide icons (https://lucide.dev, ISC/MIT). Kept as raw SVG so there's
   # no asset-pipeline dependency — clean line icons that inherit text color.
@@ -486,6 +899,16 @@ defmodule TrackConnWeb.DashboardLive do
 
   defp lucide_paths("bar-chart"),
     do: ~S(<line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/>)
+
+  defp lucide_paths("maximize-2"),
+    do:
+      ~S(<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/>)
+
+  defp lucide_paths("x"), do: ~S(<path d="M18 6 6 18"/><path d="m6 6 12 12"/>)
+
+  defp lucide_paths("trash-2"),
+    do:
+      ~S(<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>)
 
   defp lucide_paths(_), do: ""
 
