@@ -22,6 +22,16 @@ defmodule TrackConn.Diagnosis do
   @web_warn_ms 1500
   # packet loss (%) above which a ping segment is degraded
   @loss_warn_pct 2.0
+  # The ISP+path latency a sweep adds *beyond* your own router: the open-internet
+  # RTT minus the local router RTT. We judge the ISP on this *differential*, not
+  # on the internet's absolute RTT, because the absolute figure also contains
+  # your local first hop (Wi-Fi/cabling) and host scheduling jitter — so a slow
+  # local link or a busy machine could otherwise be misattributed to your
+  # provider. Set so that, for the common near-zero-latency router, it roughly
+  # preserves the old absolute-90ms behaviour while *only ever removing* false
+  # ISP blame, never adding it. Falls back to @internet_warn_ms when there's no
+  # router RTT to subtract, so we never go blind.
+  @isp_warn_ms 80
 
   @doc """
   `sweep` is a map of `%{router: result, internet: result, dns: result, web: result}`
@@ -29,7 +39,10 @@ defmodule TrackConn.Diagnosis do
   Returns the verdict map consumed by the UI and persisted to history.
   """
   def analyze(sweep) do
-    segments = Enum.map(ladder_keys(), &segment_status(&1, sweep[&1]))
+    # The router RTT is the baseline we subtract to isolate the ISP's own
+    # contribution on the internet segment (see `isp_latency/2`).
+    router_rtt = get_in(sweep, [:router, :rtt_ms])
+    segments = Enum.map(ladder_keys(), &segment_status(&1, sweep[&1], router_rtt))
     by_key = Map.new(segments, &{&1.key, &1})
 
     {culprit, status} = attribute(by_key)
@@ -49,8 +62,8 @@ defmodule TrackConn.Diagnosis do
 
   # --- per-segment status -------------------------------------------------
 
-  defp segment_status(key, %{def: defn} = result) do
-    {state, summary} = state_for(key, result)
+  defp segment_status(key, %{def: defn} = result, router_rtt) do
+    {state, summary} = segment_state(key, result, router_rtt)
 
     %{
       key: key,
@@ -59,12 +72,12 @@ defmodule TrackConn.Diagnosis do
       target: defn.target,
       state: state,
       summary: summary,
-      metrics: metrics(key, result),
+      metrics: metrics(key, result, router_rtt),
       raw: Map.get(result, :raw)
     }
   end
 
-  defp segment_status(key, nil) do
+  defp segment_status(key, nil, _router_rtt) do
     %{
       key: key,
       label: to_string(key),
@@ -77,8 +90,12 @@ defmodule TrackConn.Diagnosis do
     }
   end
 
+  # Internet is judged on the ISP differential (needs the router baseline);
+  # every other segment is judged on its own absolute measurement.
+  defp segment_state(:internet, result, router_rtt), do: isp_ping_state(result, router_rtt)
+  defp segment_state(key, result, _router_rtt), do: state_for(key, result)
+
   defp state_for(:router, r), do: ping_state(r, @router_warn_ms)
-  defp state_for(:internet, r), do: ping_state(r, @internet_warn_ms)
 
   defp state_for(:dns, %{ok?: false}), do: {:down, "name lookup failed"}
 
@@ -106,7 +123,47 @@ defmodule TrackConn.Diagnosis do
   defp ping_state(%{rtt_ms: rtt}, _warn) when is_number(rtt), do: {:healthy, "#{round_ms(rtt)}ms"}
   defp ping_state(_, _), do: {:down, "no response"}
 
-  defp metrics(key, r) when key in [:router, :internet],
+  # Internet ping state, judged on the ISP differential. Loss is connectivity, so
+  # it's judged on the internet segment's own figure (the router-first ladder
+  # already exonerates the ISP when the loss is actually local). Latency, though,
+  # is split: only the part the ISP adds *over* your router counts against it.
+  defp isp_ping_state(%{loss_pct: loss}, _router_rtt) when loss >= 100,
+    do: {:down, "100% packet loss — unreachable"}
+
+  defp isp_ping_state(%{loss_pct: loss}, _router_rtt) when loss > @loss_warn_pct,
+    do: {:degraded, "#{round_ms(loss)}% packet loss"}
+
+  defp isp_ping_state(%{rtt_ms: rtt}, router_rtt) when is_number(rtt) do
+    case isp_latency(rtt, router_rtt) do
+      # No router baseline this sweep — fall back to the absolute ceiling so we
+      # never miss a degradation just because the router didn't answer.
+      nil ->
+        if rtt > @internet_warn_ms,
+          do: {:degraded, "high latency: #{round(rtt)}ms"},
+          else: {:healthy, "#{round_ms(rtt)}ms"}
+
+      isp when isp > @isp_warn_ms ->
+        {:degraded, "ISP adds #{round(isp)}ms beyond your router (#{round(rtt)}ms total)"}
+
+      _ ->
+        {:healthy, "#{round_ms(rtt)}ms"}
+    end
+  end
+
+  defp isp_ping_state(_, _), do: {:down, "no response"}
+
+  # ISP+path latency contribution: internet RTT minus the local router RTT,
+  # floored at 0. A negative delta means the router answered *slower* than the
+  # internet hop that contains it — a local/host artifact (or just non-
+  # simultaneous samples), never a real ISP cost, so we clamp it away. Returns
+  # nil when there's no router RTT to subtract.
+  defp isp_latency(internet_rtt, router_rtt)
+       when is_number(internet_rtt) and is_number(router_rtt),
+       do: max(internet_rtt - router_rtt, 0.0)
+
+  defp isp_latency(_, _), do: nil
+
+  defp metrics(:router, r, _router_rtt),
     do: %{
       rtt_ms: r[:rtt_ms],
       loss_pct: r[:loss_pct],
@@ -114,8 +171,19 @@ defmodule TrackConn.Diagnosis do
       jitter_ms: r[:jitter_ms]
     }
 
-  defp metrics(:dns, r), do: %{ms: r[:ms], address: r[:address]}
-  defp metrics(:web, r), do: %{ms: r[:ms], status: r[:status], bytes: r[:bytes]}
+  defp metrics(:internet, r, router_rtt),
+    do: %{
+      rtt_ms: r[:rtt_ms],
+      loss_pct: r[:loss_pct],
+      max_rtt_ms: r[:max_rtt_ms],
+      jitter_ms: r[:jitter_ms],
+      # The ISP's own latency contribution, surfaced so the UI/report can say
+      # "your ISP added X ms over your router" instead of just a raw total.
+      isp_latency_ms: isp_latency(r[:rtt_ms], router_rtt)
+    }
+
+  defp metrics(:dns, r, _router_rtt), do: %{ms: r[:ms], address: r[:address]}
+  defp metrics(:web, r, _router_rtt), do: %{ms: r[:ms], status: r[:status], bytes: r[:bytes]}
 
   # --- attribution: who's to blame ---------------------------------------
 
