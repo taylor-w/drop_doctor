@@ -28,6 +28,20 @@ defmodule TrackConn.SpikeMonitor do
   # window every stat is computed over.
   @window 300
   @burst_count 10
+  # Sampling stays gap-free at all times (no blind spots), but at an *adaptive
+  # resolution*: tight spacing while the link looks disturbed, coarser once it's
+  # been calm a while. On a desktop where the user is also gaming/streaming this
+  # cuts continuous probe traffic ~60% during the common quiet case without ever
+  # going blind to the onset of a spike — we only widen the spacing, never insert
+  # a gap.
+  @fast_interval 0.2
+  @calm_interval 0.5
+  # Consecutive fully-calm bursts required before relaxing fast → calm. Acts as
+  # hysteresis so the rate can't flap; any disturbance snaps straight back.
+  @calm_streak 3
+  # A burst counts as calm when it had full delivery, raised no spike/loss event,
+  # and its jitter is at or below this (ms).
+  @calm_jitter_ms 5.0
   # Back off this long before retrying after a burst error (e.g. host briefly
   # unresolvable), so we don't spin.
   @retry_ms 1_000
@@ -62,10 +76,24 @@ defmodule TrackConn.SpikeMonitor do
 
   @impl true
   def init(opts) do
+    # `:interval` is the fast (high-resolution) spacing; `:calm_interval` the
+    # relaxed one. Clamp calm ≥ fast so a misconfiguration can't make "calm"
+    # sample *faster* than "disturbed".
+    fast = Keyword.get(opts, :interval, @fast_interval)
+    calm = max(Keyword.get(opts, :calm_interval, @calm_interval), fast)
+
     state = %{
       key: Keyword.fetch!(opts, :key),
       host: Keyword.fetch!(opts, :host),
-      interval: Keyword.get(opts, :interval, 0.2),
+      # Spacing for the *next* burst. Adapted between fast/calm (see
+      # `adapt_interval/3`); never drops below `interval_floor`, which the OS
+      # permission fallback raises if sub-second pings aren't allowed.
+      interval: fast,
+      fast_interval: fast,
+      calm_interval: calm,
+      calm_streak: Keyword.get(opts, :calm_streak, @calm_streak),
+      interval_floor: 0.0,
+      calm_count: 0,
       window: Keyword.get(opts, :window, @window),
       count: Keyword.get(opts, :count, @burst_count),
       # Injectable so the sampling loop can be unit-tested without real pings.
@@ -134,7 +162,8 @@ defmodule TrackConn.SpikeMonitor do
     # Detect events against the *prior* buffer's median (what "normal" was before
     # this burst), then fold the new samples in.
     baseline = Aggregate.median(for {:ok, ms} <- state.samples, do: ms)
-    log_events(state, baseline, result)
+    events = Stability.burst_events(baseline, result)
+    log_events(state, events)
 
     # Replies become {:ok, rtt}; un-replied packets become :loss markers.
     new = Enum.map(times, &{:ok, &1}) ++ List.duplicate(:loss, max(sent - received, 0))
@@ -142,15 +171,51 @@ defmodule TrackConn.SpikeMonitor do
     stats = Stability.summarize(samples)
 
     Phoenix.PubSub.broadcast(TrackConn.PubSub, @topic, {:stability, state.key, stats})
-    %{state | samples: samples, stats: stats}
+
+    state
+    |> Map.merge(%{samples: samples, stats: stats})
+    |> adapt_interval(events, result)
   end
 
-  defp log_events(%{persist: false}, _baseline, _result), do: :ok
+  # Choose the spacing for the *next* burst. We only ever change resolution, never
+  # insert a gap — so a spike's onset is always sampled. A burst is "calm" when it
+  # delivered every packet, raised no spike/loss event, and shows low jitter. After
+  # `calm_streak` calm bursts in a row we relax to the coarser spacing; any
+  # disturbance resets the streak and snaps back to fast on the very next burst.
+  # The result is floored by `interval_floor` (raised when the OS forbids
+  # sub-second pings — see `maybe_relax_interval/2`).
+  #
+  # Calmness is judged on *this burst's* own jitter, not the rolling window's —
+  # the `calm_streak` already supplies the smoothing, so sensing per-burst lets us
+  # relax promptly once the link settles instead of staying pinned in fast mode
+  # for the ~60s it takes an old spike to age out of the window.
+  defp adapt_interval(state, events, %{times: times, received: received, sent: sent}) do
+    calm? = events == [] and received >= sent and calm_jitter?(times)
+    calm_count = if calm?, do: state.calm_count + 1, else: 0
 
-  defp log_events(state, baseline, result) do
+    desired =
+      if calm_count >= state.calm_streak, do: state.calm_interval, else: state.fast_interval
+
+    %{state | calm_count: calm_count, interval: max(state.interval_floor, desired)}
+  end
+
+  # Too few delivered packets to measure jitter (Stability.jitter/1 → nil) counts
+  # as calm on the jitter axis; delivery itself is checked separately above, so a
+  # sparse burst still fails `calm?` via `received >= sent`.
+  defp calm_jitter?(times) do
+    case Stability.jitter(times) do
+      nil -> true
+      jitter -> jitter <= @calm_jitter_ms
+    end
+  end
+
+  defp log_events(%{persist: false}, _events), do: :ok
+  defp log_events(_state, []), do: :ok
+
+  defp log_events(state, events) do
     now = DateTime.utc_now()
 
-    for event <- Stability.burst_events(baseline, result) do
+    for event <- events do
       event
       |> Map.merge(%{
         kind: to_string(event.kind),
@@ -166,14 +231,16 @@ defmodule TrackConn.SpikeMonitor do
 
   # macOS (and some hardened Linux) reject sub-second intervals for non-root
   # users. If a burst comes back empty *because of that* (not a real outage),
-  # fall back to a 1s interval and keep going — still gap-free, just coarser.
-  defp maybe_relax_interval(%{interval: i} = state, %{times: [], raw: raw}) when i < 1.0 do
+  # raise the floor to 1s so every later burst — fast or calm — respects it.
+  # Still gap-free, just coarser.
+  defp maybe_relax_interval(%{interval_floor: floor} = state, %{times: [], raw: raw})
+       when floor < 1.0 do
     if raw =~ ~r/too short|not permitted|Operation not permitted/i do
       Logger.info(
         "spike monitor (#{state.key}): sub-second ping not permitted, using 1s interval"
       )
 
-      %{state | interval: 1.0}
+      %{state | interval_floor: 1.0, interval: 1.0}
     else
       state
     end

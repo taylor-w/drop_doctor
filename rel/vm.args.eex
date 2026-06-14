@@ -1,0 +1,28 @@
+## Erlang VM flags for the packaged release.
+##
+## Mix automatically uses this file (rel/vm.args.eex) when assembling the
+## release; dev/test run via `mix`/`iex` and are NOT affected by it. The Burrito
+## binary, which wraps the assembled release, inherits these flags.
+##
+## track_conn runs in the background on a personal machine — often while the user
+## is gaming and/or streaming on the SAME host. The defaults below make the BEAM
+## a polite background neighbour to those latency-sensitive workloads. None of
+## them affect correctness; they only change how the VM uses CPU/threads when it
+## is (almost always) idle.
+
+## Don't busy-wait when idle — sleep instead.
+##
+## By default schedulers spin for a while before sleeping, to shave wake-up
+## latency under load. That spinning keeps cores warm and steals cycles from a
+## game/encoder sharing the machine. This tool is I/O-bound and near-idle, so the
+## few extra microseconds of wake-up latency are irrelevant here, while not
+## spinning is the single biggest reduction in our background CPU footprint.
++sbwt none
++sbwtdcpu none
++sbwtdio none
+
+## Cap the scheduler pool. The VM otherwise starts one scheduler per core; this
+## is a single-user diagnostic tool, not a server, so two is ample and it can
+## never fan its run queues across every core the game wants. Online count held
+## to match.
++S 2:2
