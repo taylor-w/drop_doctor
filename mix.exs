@@ -4,7 +4,7 @@ defmodule TrackConn.MixProject do
   def project do
     [
       app: :track_conn,
-      version: "0.1.0",
+      version: "0.1.1",
       elixir: "~> 1.15",
       description:
         "Is bad internet your fault, your DNS, or your ISP? A local tool that finds out — with timestamped proof.",

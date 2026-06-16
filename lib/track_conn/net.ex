@@ -138,14 +138,43 @@ defmodule TrackConn.Net do
   so this fragile, format-sensitive parsing can be regression-tested against real
   captured output (blank gateways, IPv6 next-hops, the WSL adapter) the way
   `TrackConn.Probes.Ping.parse/2` is.
+
+  ipconfig prints the gateway on the labelled `Default Gateway . . . :` line and,
+  when an adapter has both stacks, often the IPv4 on an *unlabelled continuation
+  line* below it with the IPv6 on the labelled line. So we gather each gateway
+  line plus its continuation lines, pull every IPv4 out of them, and return the
+  first real one — never an IPv6 fragment, never a value from a `:`-split.
   """
   def parse_ipconfig_gateway(out) do
     out
     |> String.split(~r/\r?\n/)
-    |> Enum.filter(&String.contains?(&1, "Default Gateway"))
-    |> Enum.map(fn line -> line |> String.split(":") |> List.last() |> String.trim() end)
-    |> Enum.find_value(&if(real_ipv4_gateway?(&1), do: &1))
+    |> gateway_block_lines()
+    |> Enum.flat_map(&ipv4s_in/1)
+    |> Enum.find(&real_ipv4_gateway?/1)
   end
+
+  # Collect every "Default Gateway" line and the value-only continuation lines
+  # that follow it (an indented line with no `. . . :` dotted label).
+  defp gateway_block_lines(lines) do
+    lines
+    |> Enum.reduce({[], false}, fn line, {acc, in_block?} ->
+      cond do
+        String.contains?(line, "Default Gateway") -> {[line | acc], true}
+        in_block? and continuation_line?(line) -> {[line | acc], true}
+        true -> {acc, false}
+      end
+    end)
+    |> elem(0)
+    |> Enum.reverse()
+  end
+
+  # A continuation line is indented and carries only a value — no dotted label
+  # leader (". . .") like every real ipconfig field has.
+  defp continuation_line?(line),
+    do: Regex.match?(~r/^\s+\S/, line) and not String.contains?(line, ". .")
+
+  defp ipv4s_in(line),
+    do: Regex.scan(~r/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/, line) |> Enum.map(&hd/1)
 
   defp first_ipv4_gateway(out) do
     out
@@ -210,20 +239,17 @@ defmodule TrackConn.Net do
     end
   end
 
+  # Native Windows: same robust, validated parse as the WSL-interop path, so a
+  # bare IPv6 default gateway (or a `:`-split fragment of one) can never be
+  # handed to `ping` as a bogus host — which left the router segment stuck at
+  # "sampling…" with zero replies.
   defp windows_gateway do
     case System.cmd("ipconfig", [], stderr_to_stdout: true) do
-      {out, 0} ->
-        out
-        |> String.split("\n")
-        |> Enum.find_value(fn line ->
-          if String.contains?(line, "Default Gateway") do
-            line |> String.split(":") |> List.last() |> String.trim() |> nil_if_blank()
-          end
-        end)
-
-      _ ->
-        nil
+      {out, 0} -> parse_ipconfig_gateway(out)
+      _ -> nil
     end
+  rescue
+    _ -> nil
   end
 
   defp extract_via(out) do
@@ -246,6 +272,4 @@ defmodule TrackConn.Net do
   end
 
   defp valid_ip?(str), do: match?({:ok, _}, str |> to_charlist() |> :inet.parse_address())
-  defp nil_if_blank(""), do: nil
-  defp nil_if_blank(str), do: str
 end

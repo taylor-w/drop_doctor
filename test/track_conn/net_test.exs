@@ -40,5 +40,28 @@ defmodule TrackConn.NetTest do
 
       assert Net.parse_ipconfig_gateway(out) == nil
     end
+
+    test "reads the IPv4 from an unlabelled continuation line below an IPv6 gateway" do
+      # The dual-stack shape that broke native Windows: the labelled line carries
+      # the IPv6 next-hop, the real IPv4 is the indented continuation beneath it.
+      out = """
+      Wireless LAN adapter Wi-Fi:
+
+         IPv4 Address. . . . . . . . . . . : 192.168.0.42
+         Default Gateway . . . . . . . . . : fe80::1%14
+                                             192.168.0.1
+      """
+
+      assert Net.parse_ipconfig_gateway(out) == "192.168.0.1"
+    end
+
+    test "never returns an IPv6 fragment as a bogus host (the old :-split bug)" do
+      out = """
+         Default Gateway . . . . . . . . . : fe80::abcd%14
+      """
+
+      # Old code returned "abcd%14"; now we get nil (→ caller falls back safely).
+      assert Net.parse_ipconfig_gateway(out) == nil
+    end
   end
 end
