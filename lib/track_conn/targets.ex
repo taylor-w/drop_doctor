@@ -27,7 +27,7 @@ defmodule TrackConn.Targets do
       %{
         key: :internet,
         label: "The open internet (via your ISP)",
-        kind: :ping,
+        kind: :reach,
         target: internet_target(),
         about: "A raw IP address with no DNS involved. Problems here usually mean your ISP."
       },
@@ -57,16 +57,30 @@ defmodule TrackConn.Targets do
       "192.168.1.1"
   end
 
+  # Well-known anycast resolvers that almost always answer ICMP. We probe the
+  # whole set and treat the internet as reachable if *any* of them responds, so
+  # a single IP that a given network filters (some drop 1.1.1.1, others 8.8.8.8)
+  # can't fake an outage on a connection that's actually fine.
+  @default_internet_anchors ["1.1.1.1", "8.8.8.8", "9.9.9.9"]
+
   @doc """
-  The raw IP we ping to test the open internet, honoring INTERNET_IP then config.
-  Defaults to 1.1.1.1, but some networks (and WSL setups) silently drop ICMP to
-  it while others — e.g. 8.8.8.8 — answer fine, so it's overridable.
+  The set of open-internet anchors we probe (any-of). Honors `INTERNET_IP` (a
+  single override) then `:internet_anchors` / `:internet` config, else a few
+  well-known resolvers. Some networks and WSL setups silently drop ICMP to one
+  anchor (e.g. 1.1.1.1) while others answer fine — probing several keeps the ISP
+  verdict honest without the user choosing an address.
   """
-  def internet_target do
-    System.get_env("INTERNET_IP") ||
-      get_in(config(), [:internet]) ||
-      "1.1.1.1"
+  def internet_anchors do
+    cond do
+      ip = System.get_env("INTERNET_IP") -> [ip]
+      list = get_in(config(), [:internet_anchors]) -> list
+      single = get_in(config(), [:internet]) -> [single]
+      true -> @default_internet_anchors
+    end
   end
+
+  @doc "The primary internet anchor — for display and the continuous sampler."
+  def internet_target, do: hd(internet_anchors())
 
   def dns_target, do: get_in(config(), [:dns]) || "cloudflare.com"
   def web_target, do: get_in(config(), [:web]) || "https://www.google.com/generate_204"

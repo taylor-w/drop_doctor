@@ -42,9 +42,14 @@ defmodule TrackConn.Diagnosis do
     # The router RTT is the baseline we subtract to isolate the ISP's own
     # contribution on the internet segment (see `isp_latency/2`).
     router_rtt = get_in(sweep, [:router, :rtt_ms])
-    segments = Enum.map(ladder_keys(), &segment_status(&1, sweep[&1], router_rtt))
-    by_key = Map.new(segments, &{&1.key, &1})
 
+    by_key =
+      ladder_keys()
+      |> Enum.map(&segment_status(&1, sweep[&1], router_rtt))
+      |> Map.new(&{&1.key, &1})
+      |> corroborate()
+
+    segments = Enum.map(ladder_keys(), &Map.fetch!(by_key, &1))
     {culprit, status} = attribute(by_key)
 
     %{
@@ -56,6 +61,43 @@ defmodule TrackConn.Diagnosis do
       evidence: evidence(by_key),
       segments: segments
     }
+  end
+
+  # --- cross-layer corroboration ------------------------------------------
+
+  # A ping/reach segment that reads `:down` only means "this ICMP target didn't
+  # answer" — which some networks and NATs cause even while real traffic flows.
+  # If DNS resolution *and* a real page load both succeeded, the path out through
+  # your router and ISP is provably working, so an unreachable ping there is a
+  # probe artifact, not an outage: clear it rather than screaming "router down".
+  # Only a hard `:down` is overridden — genuine latency/loss `:degraded` stands.
+  defp corroborate(by_key) do
+    if proven_usable?(by_key) do
+      by_key
+      |> clear_false_down(:router)
+      |> clear_false_down(:internet)
+    else
+      by_key
+    end
+  end
+
+  defp proven_usable?(by_key), do: healthy?(by_key[:dns]) and healthy?(by_key[:web])
+
+  defp healthy?(%{state: :healthy}), do: true
+  defp healthy?(_), do: false
+
+  defp clear_false_down(by_key, key) do
+    case by_key[key] do
+      %{state: :down} = seg ->
+        Map.put(by_key, key, %{
+          seg
+          | state: :healthy,
+            summary: "reachable — ICMP blocked here, but real traffic is getting through"
+        })
+
+      _ ->
+        by_key
+    end
   end
 
   defp ladder_keys, do: [:router, :internet, :dns, :web]

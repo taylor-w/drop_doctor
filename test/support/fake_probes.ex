@@ -44,6 +44,8 @@ defmodule TrackConn.Test.FakeProbes do
 
   @doc "A registry of all-healthy fakes."
   def healthy do
-    %{ping: HealthyPing, dns: HealthyDns, http: HealthyHttp}
+    # :reach is ping-shaped, so the healthy ping fake doubles as a healthy
+    # internet-reachability result.
+    %{ping: HealthyPing, reach: HealthyPing, dns: HealthyDns, http: HealthyHttp}
   end
 end

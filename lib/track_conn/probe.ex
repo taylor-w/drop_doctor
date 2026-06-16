@@ -11,6 +11,7 @@ defmodule TrackConn.Probe do
   monitor and diagnosis rely on a common shape per kind:
 
     * ping  => `%{ok?:, rtt_ms:, loss_pct:, sent:, received:, raw:, error:}`
+    * reach => ping-shaped (multi-anchor any-of + TCP fallback; see `Probes.Reach`)
     * dns   => `%{ok?:, ms:, address:, raw:, error:}`
     * http  => `%{ok?:, ms:, status:, bytes:, raw:, error:}`
   """
@@ -21,6 +22,7 @@ defmodule TrackConn.Probe do
   def default_registry do
     %{
       ping: TrackConn.Probes.Ping,
+      reach: TrackConn.Probes.Reach,
       dns: TrackConn.Probes.Dns,
       http: TrackConn.Probes.Http
     }

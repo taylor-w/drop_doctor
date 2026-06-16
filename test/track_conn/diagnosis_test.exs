@@ -126,6 +126,35 @@ defmodule TrackConn.DiagnosisTest do
     assert v.culprit == :web
   end
 
+  describe "cross-layer corroboration: a blocked ping can't fake an outage" do
+    test "router+internet ping unreachable but DNS & web healthy -> not an outage" do
+      # The WSL/ICMP-filtered case: pings to the router and the internet anchor
+      # both fail, yet DNS resolves and a real page loads — so traffic is clearly
+      # getting out. The verdict must stay healthy, not scream 'router down'.
+      v = analyze(ping(100, nil), ping(100, nil), dnsr(true, 20), webr(true, 200))
+      assert v.culprit == :none
+      assert v.status == :healthy
+      assert get_in(by_key(v), [:router, :state]) == :healthy
+      assert get_in(by_key(v), [:internet, :state]) == :healthy
+      assert get_in(by_key(v), [:router, :summary]) =~ "ICMP blocked"
+    end
+
+    test "still a real outage when DNS & web are ALSO failing" do
+      # No corroboration — nothing downstream works — so the down stands.
+      v = analyze(ping(100, nil), ping(100, nil), dnsr(false, nil), webr(false, nil))
+      assert v.culprit == :local
+      assert v.status == :down
+    end
+
+    test "genuine degradation is NOT cleared (only hard down is)" do
+      # Router shows real packet loss while the page still loads. That's a real
+      # local problem worth surfacing — corroboration must leave it alone.
+      v = analyze(ping(20, 8), ping(0, 14), dnsr(true, 20), webr(true, 200))
+      assert v.culprit == :local
+      assert v.status == :degraded
+    end
+  end
+
   test "verdict always carries human-facing copy" do
     v = analyze(ping(0, 0.3), ping(100, nil), dnsr(false, nil), webr(false, nil))
     assert is_binary(v.headline)

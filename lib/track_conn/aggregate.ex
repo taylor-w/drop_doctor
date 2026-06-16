@@ -37,6 +37,9 @@ defmodule TrackConn.Aggregate do
   defp smooth([latest | _] = series) do
     case latest.def.kind do
       :ping -> smooth_ping(latest, series)
+      # Reach is ping-shaped (loss/rtt/spike/jitter), so it median-smooths the
+      # same way — one filtered-anchor blip can't flip the verdict.
+      :reach -> smooth_ping(latest, series)
       :dns -> smooth_timed(latest, series)
       :http -> smooth_timed(latest, series)
       _ -> latest

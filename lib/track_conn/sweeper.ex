@@ -64,7 +64,7 @@ defmodule TrackConn.Sweeper do
     mod.run(target, [])
   end
 
-  defp timeout_result(%{kind: :ping}, msg),
+  defp timeout_result(%{kind: kind}, msg) when kind in [:ping, :reach],
     do: %{
       ok?: false,
       rtt_ms: nil,
