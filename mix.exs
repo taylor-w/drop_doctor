@@ -116,6 +116,11 @@ defmodule TrackConn.MixProject do
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["compile", "tailwind track_conn", "esbuild track_conn"],
       "assets.deploy": [
+        # Compile first so colocated JS hooks are (re)extracted to
+        # _build/<env>/phoenix-colocated *before* esbuild bundles — otherwise a
+        # stale/empty extraction silently drops every hook from the minified
+        # bundle (dead timeline chart, no flash auto-dismiss). Mirrors assets.build.
+        "compile",
         "tailwind track_conn --minify",
         "esbuild track_conn --minify",
         "phx.digest"
