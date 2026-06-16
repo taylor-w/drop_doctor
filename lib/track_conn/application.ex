@@ -30,7 +30,14 @@ defmodule TrackConn.Application do
         children
         |> List.insert_at(-2, TrackConn.Monitor)
         |> List.insert_at(-2, spike_child(:router, TrackConn.Targets.router_target()))
-        |> List.insert_at(-2, spike_child(:internet, TrackConn.Targets.internet_target()))
+        |> List.insert_at(
+          -2,
+          spike_child(
+            :internet,
+            TrackConn.Targets.internet_target(),
+            TrackConn.Targets.internet_anchors()
+          )
+        )
       else
         children
       end
@@ -60,10 +67,11 @@ defmodule TrackConn.Application do
   end
 
   # Two SpikeMonitors share one module, so each needs a distinct supervisor id.
-  defp spike_child(key, host) do
-    Supervisor.child_spec({TrackConn.SpikeMonitor, key: key, host: host},
-      id: {TrackConn.SpikeMonitor, key}
-    )
+  # `hosts` lets the internet monitor pick a reachable anchor; the router has a
+  # single target.
+  defp spike_child(key, host, hosts \\ nil) do
+    opts = [key: key, host: host] ++ if(hosts, do: [hosts: hosts], else: [])
+    Supervisor.child_spec({TrackConn.SpikeMonitor, opts}, id: {TrackConn.SpikeMonitor, key})
   end
 
   defp skip_migrations?() do

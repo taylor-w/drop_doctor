@@ -372,6 +372,10 @@ defmodule TrackConnWeb.DashboardLive do
                 <div>
                   <div class="text-xs font-semibold opacity-70 mb-1">{name}</div>
                   <%= case @stability[key] do %>
+                    <% %{sample_count: n, received: 0} when n > 0 -> %>
+                      <div class="text-xs opacity-50 leading-snug">
+                        no ICMP reply here — real traffic is getting through (see the verdict above)
+                      </div>
                     <% %{sample_count: n} = st when n > 0 -> %>
                       <div class="grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-xs">
                         <div class="flex justify-between"><span class="opacity-50">jitter</span><span>{fmt_ms(st.jitter_ms)}</span></div>

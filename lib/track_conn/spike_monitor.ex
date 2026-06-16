@@ -83,9 +83,20 @@ defmodule TrackConn.SpikeMonitor do
 
   @impl true
   def init(opts) do
+    host = Keyword.fetch!(opts, :host)
+    # A host may have several interchangeable candidates (the open-internet
+    # anchors). We start on the first and, if more were given, asynchronously
+    # switch to the first one that actually answers — so the continuous sampler
+    # tracks the same reachable target the 5s reachability probe uses, instead of
+    # flat-lining at 100% loss on an anchor this network happens to filter.
+    hosts = Keyword.get(opts, :hosts, [host])
+
     state = %{
       key: Keyword.fetch!(opts, :key),
-      host: Keyword.fetch!(opts, :host),
+      host: hd(hosts),
+      hosts: hosts,
+      # Reachability check used to pick a live anchor; injectable for tests.
+      reach_fun: Keyword.get(opts, :reach_fun, &reachable?/1),
       interval: Keyword.get(opts, :interval, @interval),
       # Raised to 1.0 if the OS rejects sub-second pings (macOS/some hardened
       # Linux for non-root); the effective interval is max(interval, floor).
@@ -105,6 +116,7 @@ defmodule TrackConn.SpikeMonitor do
       reader_started_ms: nil
     }
 
+    if length(hosts) > 1, do: send(self(), :select_host)
     {:ok, start_stream(state)}
   end
 
@@ -147,6 +159,35 @@ defmodule TrackConn.SpikeMonitor do
   end
 
   def handle_info(:restart_stream, state), do: {:noreply, start_stream(state)}
+
+  # Probe the candidate hosts off-process (a reachability check can block ~1s/host)
+  # and report back the first that answers. Done once, shortly after boot.
+  def handle_info(:select_host, state) do
+    parent = self()
+    hosts = state.hosts
+    reach = state.reach_fun
+    spawn(fn -> if h = Enum.find(hosts, reach), do: send(parent, {:host_selected, h}) end)
+    {:noreply, state}
+  end
+
+  # Already sampling the chosen host — nothing to do.
+  def handle_info({:host_selected, host}, %{host: host} = state), do: {:noreply, state}
+
+  # Switch the resident stream to the reachable anchor and start its window fresh.
+  def handle_info({:host_selected, host}, %{running: true} = state) do
+    state =
+      state
+      |> stop_stream()
+      |> Map.merge(%{host: host, samples: [], pending: [], stats: Stability.empty()})
+      |> start_stream()
+
+    Phoenix.PubSub.broadcast(TrackConn.PubSub, @topic, {:stability, state.key, state.stats})
+    Logger.info("spike monitor (#{state.key}): sampling #{host} — first reachable anchor")
+    {:noreply, state}
+  end
+
+  def handle_info({:host_selected, host}, state), do: {:noreply, %{state | host: host}}
+
   def handle_info(_msg, state), do: {:noreply, state}
 
   # --- internals ----------------------------------------------------------
@@ -237,6 +278,9 @@ defmodule TrackConn.SpikeMonitor do
   end
 
   defp maybe_raise_floor(state, _reason), do: state
+
+  # A quick "does this host answer ICMP at all" check for anchor selection.
+  defp reachable?(host), do: match?(%{ok?: true}, Ping.run(host, count: 2, timeout: 1))
 
   defp now_ms, do: System.monotonic_time(:millisecond)
 end

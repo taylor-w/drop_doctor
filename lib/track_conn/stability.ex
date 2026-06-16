@@ -26,6 +26,7 @@ defmodule TrackConn.Stability do
 
     %{
       sample_count: sent,
+      received: received,
       loss_pct: if(sent > 0, do: (sent - received) * 100.0 / sent, else: 0.0),
       rtt_ms: round1(Aggregate.median(rtts)),
       jitter_ms: round1(jitter(rtts)),
@@ -40,6 +41,7 @@ defmodule TrackConn.Stability do
   def empty do
     %{
       sample_count: 0,
+      received: 0,
       loss_pct: 0.0,
       rtt_ms: nil,
       jitter_ms: nil,
@@ -52,9 +54,15 @@ defmodule TrackConn.Stability do
 
   @doc """
   Detect discrete instability events in a single burst, given the recent
-  `baseline` median (`nil` while warming up — no spike detection until we know
+  `baseline` median (`nil` while warming up — no event detection until we know
   what "normal" is). Returns event attrs (no timestamp/host — the caller stamps
   those). A burst can yield a latency event, a loss event, or both.
+
+  Both kinds require a numeric `baseline`: an event is a *deviation* from a
+  working norm. A host that has never replied (no baseline) is unreachable, not
+  intermittently lossy — surfacing that is the 5-second sweep's job (and its
+  cross-layer corroboration), so we don't manufacture endless "100% loss bursts"
+  for an ICMP-filtered target that real traffic is sailing past.
   """
   def burst_events(baseline, %{times: times, sent: sent, received: received}) do
     lost = max(sent - received, 0)
@@ -74,7 +82,7 @@ defmodule TrackConn.Stability do
       end
 
     loss =
-      if lost > 0 and sent > 0 do
+      if is_number(baseline) and lost > 0 and sent > 0 do
         [%{kind: :loss, loss_pct: round1(lost * 100.0 / sent), samples: sent}]
       else
         []

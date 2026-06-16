@@ -72,6 +72,14 @@ defmodule TrackConn.StabilityTest do
       assert [%{kind: :loss, loss_pct: 50.0, samples: 4}] = Stability.burst_events(12.0, burst)
     end
 
+    test "no baseline yet -> loss is NOT an event (unreachable target, not a loss burst)" do
+      # A host that has never replied (no baseline) shouldn't manufacture endless
+      # '100% loss' bursts — that's an ICMP-filtered/unreachable target, which the
+      # 5s sweep handles, not an intermittent stutter.
+      burst = %{times: [], sent: 10, received: 0}
+      assert Stability.burst_events(nil, burst) == []
+    end
+
     test "a burst can report both a spike and loss" do
       burst = %{times: [12.0, 190.0], sent: 4, received: 2}
       kinds = Stability.burst_events(12.0, burst) |> Enum.map(& &1.kind)
