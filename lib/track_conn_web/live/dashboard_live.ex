@@ -34,7 +34,11 @@ defmodule TrackConnWeb.DashboardLive do
      |> assign(:history, history)
      |> assign(:stats, stats(history))
      |> assign(:total_all, Measurements.count())
-     |> assign(:expanded, nil)
+     # `proof_key` is the last-selected segment (retained even while closing so
+     # the panel can animate shut with its content still in place); `proof_open`
+     # is whether that panel is currently expanded.
+     |> assign(:proof_key, nil)
+     |> assign(:proof_open, false)
      |> assign(:timeline_open, false)
      |> assign(:tl_offset, 0)
      |> assign(:timeline_rows, [])
@@ -85,8 +89,19 @@ defmodule TrackConnWeb.DashboardLive do
   end
 
   def handle_event("toggle_segment", %{"key" => key}, socket) do
-    expanded = if socket.assigns.expanded == key, do: nil, else: key
-    {:noreply, assign(socket, :expanded, expanded)}
+    # Clicking the open segment again collapses it; clicking any other segment
+    # swaps the content and (re)opens. We never null `proof_key` on close, so the
+    # panel keeps its content through the collapse animation.
+    socket =
+      if socket.assigns.proof_open and socket.assigns.proof_key == key do
+        assign(socket, :proof_open, false)
+      else
+        socket
+        |> assign(:proof_key, key)
+        |> assign(:proof_open, true)
+      end
+
+    {:noreply, socket}
   end
 
   def handle_event("open_timeline", _params, socket) do
@@ -124,6 +139,8 @@ defmodule TrackConnWeb.DashboardLive do
      |> assign(:stats, stats([]))
      |> assign(:total_all, 0)
      |> assign(:spike_events, 0)
+     |> assign(:proof_open, false)
+     |> assign(:proof_key, nil)
      |> assign(:stability, initial_stability())
      |> assign(:deep, %{status: :idle, target: Targets.internet_target()})
      |> assign(:timeline_open, false)
@@ -191,8 +208,8 @@ defmodule TrackConnWeb.DashboardLive do
       usable: usable
     }
 
-    expanded_seg =
-      case assigns.expanded && safe_existing_atom(assigns.expanded) do
+    proof_seg =
+      case assigns.proof_key && safe_existing_atom(assigns.proof_key) do
         nil -> nil
         key -> Map.get(segs_by_key, key)
       end
@@ -202,7 +219,7 @@ defmodule TrackConnWeb.DashboardLive do
       |> assign(:nodes, nodes)
       |> assign(:links, links)
       |> assign(:segs_by_key, segs_by_key)
-      |> assign(:expanded_seg, expanded_seg)
+      |> assign(:proof_seg, proof_seg)
 
     ~H"""
     <Layouts.app flash={@flash}>
@@ -268,56 +285,72 @@ defmodule TrackConnWeb.DashboardLive do
               <% end %>
             </div>
 
-    <!-- The animated path -->
-            <div class="flex items-stretch gap-1 sm:gap-2 overflow-x-auto py-2">
-              <%= for {node, i} <- Enum.with_index(@nodes) do %>
-                <!-- Node -->
-                <div class="flex flex-col items-center gap-1.5 shrink-0 w-16 sm:w-20">
-                  <div class={"size-12 sm:size-14 rounded-full grid place-items-center border-2 bg-base-100 #{node_ring(node.state)} #{node_alert(node.state)}"}>
-                    <.lucide name={node.icon} class="size-6 sm:size-7" />
+    <!-- The animated path (+ the measurement it reveals, kept together so the
+                 panel collapses without leaving a gap) -->
+            <div>
+              <div class="flex items-stretch gap-1 sm:gap-2 overflow-x-auto py-2">
+                <%= for {node, i} <- Enum.with_index(@nodes) do %>
+                  <!-- Node -->
+                  <div class="flex flex-col items-center gap-1.5 shrink-0 w-16 sm:w-20">
+                    <div class={"size-12 sm:size-14 rounded-full grid place-items-center border-2 bg-base-100 #{node_ring(node.state)} #{node_alert(node.state)}"}>
+                      <.lucide name={node.icon} class="size-6 sm:size-7" />
+                    </div>
+                    <span class="text-xs font-semibold text-center leading-tight">{node.label}</span>
                   </div>
-                  <span class="text-xs font-semibold text-center leading-tight">{node.label}</span>
-                </div>
 
-    <!-- Link (after every node except the last) -->
-                <%= if link = Enum.at(@links, i) do %>
-                  <button
-                    type="button"
-                    class="flex-1 min-w-[3rem] flex flex-col items-center justify-center gap-1.5 px-1 group cursor-pointer"
-                    phx-click="toggle_segment"
-                    phx-value-key={link.seg.key}
-                    title="Click for the raw measurement"
-                  >
-                    <span class={"text-xs font-mono font-semibold #{status_text(link.seg.state)}"}>
-                      {link_latency(link.seg)}
-                    </span>
-                    <span class={"tc-link h-1.5 w-full rounded-full #{link_color(link.seg.state)} #{not @running && "tc-link-paused"}"}>
-                    </span>
-                    <span class="text-[10px] uppercase tracking-wide opacity-50 text-center leading-tight group-hover:opacity-80">
-                      {link.caption}
-                    </span>
-                  </button>
-                <% end %>
-              <% end %>
-            </div>
-
-    <!-- Expanded raw measurement (the proof) -->
-            <%= if @expanded_seg do %>
-              <div class="border-t border-base-300 pt-3 text-xs">
-                <div class="flex items-center justify-between mb-2">
-                  <span class="font-semibold opacity-70">
-                    {@expanded_seg.label} — raw measurement (the proof)
-                  </span>
-                  <span class={"font-mono #{status_text(@expanded_seg.state)}"}>{@expanded_seg.summary}</span>
-                </div>
-                <%= if @expanded_seg.key == :usable do %>
-                  <pre class="tc-secret bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{@segs_by_key.dns.raw}
-    {@segs_by_key.web.raw}</pre>
-                <% else %>
-                  <pre class="tc-secret bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{@expanded_seg.raw}</pre>
+    <!-- Link (after every node except the last). Clicking reveals its raw
+                       measurement below; the active link gets a soft chip + caret. -->
+                  <%= if link = Enum.at(@links, i) do %>
+                    <% active = @proof_open and @proof_key == to_string(link.seg.key) %>
+                    <button
+                      type="button"
+                      class={"tc-link-btn flex-1 min-w-[3rem] flex flex-col items-center justify-center gap-1.5 px-1 py-1 rounded-lg group cursor-pointer #{active && "tc-link-btn-active"}"}
+                      phx-click="toggle_segment"
+                      phx-value-key={link.seg.key}
+                      aria-expanded={to_string(active)}
+                      title="Show the raw measurement"
+                    >
+                      <span class={"text-xs font-mono font-semibold #{status_text(link.seg.state)}"}>
+                        {link_latency(link.seg)}
+                      </span>
+                      <span class={"tc-link h-1.5 w-full rounded-full #{link_color(link.seg.state)} #{not @running && "tc-link-paused"}"}>
+                      </span>
+                      <span class={"text-[10px] uppercase tracking-wide text-center leading-tight flex items-center gap-1 transition-opacity #{if active, do: "opacity-90", else: "opacity-50 group-hover:opacity-80"}"}>
+                        {link.caption}
+                        <.lucide
+                          name="chevron-down"
+                          class={"size-3 -mr-1 transition-all #{if active, do: "rotate-180 opacity-100", else: "opacity-0 group-hover:opacity-60"}"}
+                        />
+                      </span>
+                    </button>
+                  <% end %>
                 <% end %>
               </div>
-            <% end %>
+
+    <!-- The raw measurement, smoothly expanding/collapsing in place -->
+              <div class={"tc-proof #{@proof_open && "tc-proof-open"}"}>
+                <div class="tc-proof-clip">
+                  <%= if @proof_seg do %>
+                    <div class="tc-cmd mt-4">
+                      <div class="tc-cmd-head">
+                        <span class="flex items-center gap-2 min-w-0">
+                          <span class={"tc-cmd-dot #{link_color(@proof_seg.state)}"}></span>
+                          <span class="truncate">{@proof_seg.label}</span>
+                          <span class="opacity-40 hidden sm:inline">· live measurement</span>
+                        </span>
+                        <span class={"font-mono shrink-0 #{status_text(@proof_seg.state)}"}>{@proof_seg.summary}</span>
+                      </div>
+                      <%= if @proof_seg.key == :usable do %>
+                        <pre class="tc-cmd-body tc-secret">{@segs_by_key.dns.raw}
+    {@segs_by_key.web.raw}</pre>
+                      <% else %>
+                        <pre class="tc-cmd-body tc-secret">{@proof_seg.raw}</pre>
+                      <% end %>
+                    </div>
+                  <% end %>
+                </div>
+              </div>
+            </div>
 
             <%= if action = Map.get(@verdict, :action) do %>
               <div class="alert alert-warning text-sm">
@@ -999,6 +1032,8 @@ defmodule TrackConnWeb.DashboardLive do
       ~S(<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/>)
 
   defp lucide_paths("x"), do: ~S(<path d="M18 6 6 18"/><path d="m6 6 12 12"/>)
+
+  defp lucide_paths("chevron-down"), do: ~S(<path d="m6 9 6 6 6-6"/>)
 
   defp lucide_paths("trash-2"),
     do:

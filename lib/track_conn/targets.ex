@@ -4,11 +4,11 @@ defmodule TrackConn.Targets do
   (the router) out to the open internet. Comparing where on this ladder
   things go wrong is the core of the diagnosis.
 
-  Targets are configurable via application config (`:track_conn, :targets`)
-  and the router can be overridden with the `ROUTER_IP` env var. Under WSL the
-  physical router is discovered automatically from the Windows host (see
-  `TrackConn.Net`), so `ROUTER_IP` is only needed there as a manual fallback
-  when the host can't be reached.
+  Targets are configurable via application config (`:track_conn, :targets`); the
+  router can be overridden with the `ROUTER_IP` env var and the open-internet
+  probe with `INTERNET_IP`. Under WSL the physical router is discovered
+  automatically from the Windows host (see `TrackConn.Net`), so `ROUTER_IP` is
+  only needed there as a manual fallback when the host can't be reached.
   """
 
   @doc """
@@ -57,7 +57,17 @@ defmodule TrackConn.Targets do
       "192.168.1.1"
   end
 
-  def internet_target, do: get_in(config(), [:internet]) || "1.1.1.1"
+  @doc """
+  The raw IP we ping to test the open internet, honoring INTERNET_IP then config.
+  Defaults to 1.1.1.1, but some networks (and WSL setups) silently drop ICMP to
+  it while others — e.g. 8.8.8.8 — answer fine, so it's overridable.
+  """
+  def internet_target do
+    System.get_env("INTERNET_IP") ||
+      get_in(config(), [:internet]) ||
+      "1.1.1.1"
+  end
+
   def dns_target, do: get_in(config(), [:dns]) || "cloudflare.com"
   def web_target, do: get_in(config(), [:web]) || "https://www.google.com/generate_204"
 
