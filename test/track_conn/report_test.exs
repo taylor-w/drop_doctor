@@ -228,12 +228,14 @@ defmodule TrackConn.ReportTest do
       lines = String.split(csv, "\r\n", trim: true)
 
       assert hd(lines) ==
-               "timestamp_utc,segment,host,kind,peak_ms,baseline_ms,loss_pct,samples"
+               "timestamp_utc,segment,host,kind,peak_ms,baseline_ms,loss_pct,samples,source,co_occurring"
 
       assert length(lines) == 3
       # oldest (the loss event) first
       assert Enum.at(lines, 1) =~ "2026-06-05T12:59:40Z,internet,1.1.1.1,loss"
       assert List.last(lines) =~ "2026-06-05T12:59:52Z,internet,1.1.1.1,latency,180.0,14.0"
+      # both fixture events are internet-only, so they attribute to the ISP
+      assert List.last(lines) =~ ",isp,false"
     end
 
     test "empty spike log still yields a valid header-only CSV" do
@@ -241,7 +243,8 @@ defmodule TrackConn.ReportTest do
         Report.build(now: @now, verdict: verdict(), deep: nil, sweeps: [], spike_events: [])
         |> Report.spikes_csv()
 
-      assert csv == "timestamp_utc,segment,host,kind,peak_ms,baseline_ms,loss_pct,samples\r\n"
+      assert csv ==
+               "timestamp_utc,segment,host,kind,peak_ms,baseline_ms,loss_pct,samples,source,co_occurring\r\n"
     end
 
     test "HTML report includes a stability section listing the events" do

@@ -8,7 +8,7 @@ defmodule TrackConnWeb.DashboardLive do
   """
   use TrackConnWeb, :live_view
 
-  alias TrackConn.{DeepDiagnostic, Measurements, Monitor, Net, SpikeMonitor, Targets}
+  alias TrackConn.{DeepDiagnostic, Measurements, Monitor, Net, SpikeAnalysis, SpikeMonitor, Targets}
 
   # How many sweeps the expanded timeline shows at once. The window pans across
   # the full recorded history (drag), anchored `tl_offset` sweeps back from now.
@@ -38,6 +38,7 @@ defmodule TrackConnWeb.DashboardLive do
      |> assign(:timeline_open, false)
      |> assign(:tl_offset, 0)
      |> assign(:timeline_rows, [])
+     |> assign(:timeline_spikes, [])
      |> assign(:stability, initial_stability())
      |> assign(:spike_events, Measurements.count_spike_events())
      |> assign(:deep, %{status: :idle, target: Targets.internet_target()})
@@ -234,10 +235,11 @@ defmodule TrackConnWeb.DashboardLive do
           <div class="alert alert-info text-sm">
             <span>
               <strong>WSL detected.</strong>
-              The "router" hop is your Windows host, not your physical router.
-              For true router vs. ISP attribution, start the app with
+              We couldn't reach the Windows host to find your physical router, so
+              the "router" hop is the WSL virtual switch and router vs. ISP
+              attribution may be off. Restart the app with
               <code class="px-1">ROUTER_IP=192.168.1.1</code>
-              (your real gateway).
+              (your real gateway) to fix it.
             </span>
           </div>
         <% end %>
@@ -498,7 +500,7 @@ defmodule TrackConnWeb.DashboardLive do
   @tl_pad 10
 
   defp render_timeline(assigns) do
-    assigns = assign(assigns, :tl, timeline(assigns.timeline_rows))
+    assigns = assign(assigns, :tl, timeline(assigns.timeline_rows, assigns.timeline_spikes))
 
     ~H"""
     <div
@@ -540,6 +542,8 @@ defmodule TrackConnWeb.DashboardLive do
             <strong>ISP adds beyond your router</strong>
             — when it swells, the problem is past your equipment. A bump in <em>both</em>
             lines at once is local (your machine or Wi-Fi), not your provider.
+            Vertical ticks mark brief spikes the smoothed line averages away —
+            <strong>amber</strong> for your ISP, <strong>grey</strong> for local; dashed ticks are packet loss.
           </p>
 
           <%= if @timeline_rows == [] do %>
@@ -568,9 +572,13 @@ defmodule TrackConnWeb.DashboardLive do
             </div>
 
             <div class="tl-muted flex justify-between text-[10px] opacity-50 font-mono">
-              <span>older · {fmt_time(@tl.first_at)}</span>
+              <span>
+                older · <span class="tc-secret" data-utc={utc_iso(@tl.first_at)} data-utc-style="time">{fmt_time(@tl.first_at)}</span>
+              </span>
               <span>{@tl.n} sweeps · ~{@tl.minutes} min</span>
-              <span>{fmt_time(@tl.last_at)} · newer</span>
+              <span>
+                <span class="tc-secret" data-utc={utc_iso(@tl.last_at)} data-utc-style="time">{fmt_time(@tl.last_at)}</span> · newer
+              </span>
             </div>
 
             <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
@@ -582,6 +590,12 @@ defmodule TrackConnWeb.DashboardLive do
               </span>
               <span class="flex items-center gap-1.5">
                 <span class="inline-block w-3 h-2.5 bg-warning/30"></span> ISP added (internet − router)
+              </span>
+              <span class="flex items-center gap-1.5">
+                <span class="inline-block size-2 rounded-full bg-warning"></span> ISP spike
+              </span>
+              <span class="flex items-center gap-1.5">
+                <span class="inline-block size-2 rounded-full bg-base-content/50"></span> Local spike
               </span>
             </div>
           <% end %>
@@ -698,12 +712,27 @@ defmodule TrackConnWeb.DashboardLive do
             const marks = (d.markers || []).map((m) =>
               `<rect x="${m.x - 1.5}" y="0" width="3" height="${h}" class="tl-marker ${m.status === "down" ? "text-error" : "text-warning"}" fill="currentColor" fill-opacity="0.14"/>`
             ).join("")
+            // Logged spike/loss events as vertical ticks: amber = your ISP (the
+            // ones worth raising), muted = local (machine/Wi-Fi); dashed = brief
+            // packet loss. A <title> gives a hover tooltip with the detail.
+            const esc = (s) => String(s).replace(/[<&>]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]))
+            const spikes = (d.spikes || []).map((s) => {
+              const isp = s.source === "isp"
+              const cls = isp ? "text-warning" : "text-base-content/50"
+              const dash = s.kind === "loss" ? `stroke-dasharray="2 3"` : ""
+              const op = isp ? 0.6 : 0.4
+              return `<g class="tl-spike ${cls}"><title>${esc(s.label)}</title>` +
+                `<line x1="${s.x}" x2="${s.x}" y1="10" y2="${h}" stroke="currentColor" stroke-width="1" stroke-opacity="${op}" ${dash} vector-effect="non-scaling-stroke"/>` +
+                `<circle cx="${s.x}" cy="7" r="3" fill="currentColor" fill-opacity="${isp ? 0.95 : 0.65}"/>` +
+              `</g>`
+            }).join("")
             this.content.innerHTML =
               `<svg viewBox="0 0 ${w} ${h}" class="w-full block" style="aspect-ratio:${w}/${h}">` +
                 grid + marks +
                 `<polygon class="tl-band text-warning" fill="currentColor" fill-opacity="0.16" stroke="none" points="${d.band}"/>` +
                 `<polyline class="tl-router text-base-content/40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" points="${d.router}"/>` +
                 `<polyline class="text-primary" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" points="${d.internet}"/>` +
+                spikes +
               `</svg>`
           }
         }
@@ -718,9 +747,29 @@ defmodule TrackConnWeb.DashboardLive do
     max_off = max(socket.assigns.total_all - @tl_window, 0)
     offset = offset |> max(0) |> min(max_off)
 
+    rows = Measurements.window(@tl_window, offset)
+
     socket
     |> assign(:tl_offset, offset)
-    |> assign(:timeline_rows, Measurements.window(@tl_window, offset))
+    |> assign(:timeline_rows, rows)
+    |> assign(:timeline_spikes, window_spikes(rows))
+  end
+
+  # The logged spike/loss events that fall inside the currently-shown window,
+  # annotated with their likely source so the timeline can colour them (amber =
+  # ISP, muted = local). Pulled from the continuous sampler, not the 5s sweeps —
+  # these are the brief blips the smoothed line deliberately averages away.
+  defp window_spikes([]), do: []
+
+  defp window_spikes(rows) do
+    from = tl_at(List.first(rows))
+    to = tl_at(List.last(rows))
+
+    if from && to do
+      Measurements.spike_events_between(from, to) |> SpikeAnalysis.annotate()
+    else
+      []
+    end
   end
 
   # On each new sweep while the timeline is open: the live edge (offset 0) tracks
@@ -735,7 +784,7 @@ defmodule TrackConnWeb.DashboardLive do
 
   # Build everything the timeline SVG needs from the history rows (newest-first
   # in the socket; charted oldest → newest, left → right).
-  defp timeline(history) do
+  defp timeline(history, spikes) do
     # Oldest-first → plotted left-to-right, so the newest sweep sits on the right
     # (now-on-right). `history` (the pan window) already arrives oldest-first.
     rows = history
@@ -749,14 +798,17 @@ defmodule TrackConnWeb.DashboardLive do
     band = tl_band(inet, rtr, max, n)
     markers = tl_markers(rows, n)
 
+    first_at = tl_at(List.first(rows))
+    last_at = tl_at(List.last(rows))
+
     %{
       w: @tl_w,
       h: @tl_h,
       max: max,
       n: n,
       minutes: max(round(n * 5 / 60), 1),
-      first_at: tl_at(List.first(rows)),
-      last_at: tl_at(List.last(rows)),
+      first_at: first_at,
+      last_at: last_at,
       # The SVG is drawn client-side (so panning stays smooth), so ship the
       # precomputed geometry to the hook as JSON rather than rendering it here.
       series:
@@ -767,9 +819,51 @@ defmodule TrackConnWeb.DashboardLive do
           internet: internet,
           router: router,
           band: band,
-          markers: markers
+          markers: markers,
+          spikes: tl_spikes(spikes, first_at, last_at)
         })
     }
+  end
+
+  # Place each logged spike on the time axis. The line/band are indexed by sweep
+  # position, but spikes carry an absolute timestamp, so we map by *time* across
+  # the window's [first_at, last_at] span (sweeps are ~uniform 5s, so the two
+  # agree closely). Each marker ships its x, source (for colour) and kind (latency
+  # vs loss) plus a label for a hover tooltip.
+  defp tl_spikes([], _first, _last), do: []
+  defp tl_spikes(_spikes, %DateTime{} = from, %DateTime{} = to) when from == to, do: []
+
+  defp tl_spikes(spikes, %DateTime{} = from, %DateTime{} = to) do
+    span = DateTime.diff(to, from, :millisecond)
+
+    if span <= 0 do
+      []
+    else
+      Enum.map(spikes, fn e ->
+        frac = DateTime.diff(e.occurred_at, from, :millisecond) / span
+        x = (frac * @tl_w) |> max(0.0) |> min(@tl_w * 1.0)
+
+        %{
+          x: Float.round(x, 1),
+          source: to_string(Map.get(e, :source, :local)),
+          kind: e.kind,
+          label: spike_label(e)
+        }
+      end)
+    end
+  end
+
+  defp tl_spikes(_spikes, _from, _to), do: []
+
+  defp spike_label(e) do
+    detail =
+      case e.kind do
+        "latency" -> "#{fmt(e.peak_ms)} ms spike"
+        "loss" -> "#{fmt(e.loss_pct)}% loss"
+        _ -> "event"
+      end
+
+    "#{SpikeAnalysis.source_label(Map.get(e, :source, :local))} · #{detail}"
   end
 
   # Y-scale ceiling: the largest plotted value with 10% headroom, never below
@@ -1134,8 +1228,5 @@ defmodule TrackConnWeb.DashboardLive do
     %{total: total, healthy: healthy, uptime: round(up / total * 100)}
   end
 
-  defp wsl_warning do
-    Net.wsl?() and is_nil(System.get_env("ROUTER_IP")) and
-      not String.starts_with?(Targets.router_target(), "192.168.")
-  end
+  defp wsl_warning, do: Net.wsl_router_unresolved?()
 end

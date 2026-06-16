@@ -23,7 +23,7 @@ defmodule TrackConn.Report do
   and free of any web or rendering dependency.
   """
 
-  alias TrackConn.{Measurements, Monitor, Net, Targets}
+  alias TrackConn.{Measurements, Monitor, Net, SpikeAnalysis, Targets}
 
   @csv_columns ~w(
     timestamp_utc status culprit headline
@@ -58,12 +58,15 @@ defmodule TrackConn.Report do
       deep: Keyword.get_lazy(opts, :deep, &safe_latest_deep/0),
       sweeps: sweeps,
       spike_events:
-        Keyword.get_lazy(opts, :spike_events, fn ->
+        opts
+        |> Keyword.get_lazy(:spike_events, fn ->
           Measurements.recent_spike_events(Keyword.get(opts, :limit, @default_limit))
-        end),
+        end)
+        |> SpikeAnalysis.annotate(),
       stats: stats(sweeps),
       targets: targets(),
-      wsl?: Net.wsl?()
+      wsl?: Net.wsl?(),
+      wsl_unresolved?: Net.wsl_router_unresolved?()
     }
   end
 
@@ -122,7 +125,7 @@ defmodule TrackConn.Report do
   end
 
   @spikes_csv_columns ~w(
-    timestamp_utc segment host kind peak_ms baseline_ms loss_pct samples
+    timestamp_utc segment host kind peak_ms baseline_ms loss_pct samples source co_occurring
   )
 
   @doc """
@@ -149,7 +152,9 @@ defmodule TrackConn.Report do
       e.peak_ms,
       e.baseline_ms,
       e.loss_pct,
-      e.samples
+      e.samples,
+      Map.get(e, :source),
+      Map.get(e, :co_occurring?)
     ]
     |> Enum.map(&csv_field/1)
     |> Enum.join(",")
@@ -480,6 +485,7 @@ defmodule TrackConn.Report do
           <td class="mono">#{time_el(e.occurred_at)}</td>
           <td>#{esc(segment_label(e.segment))}</td>
           <td>#{esc(spike_detail(e))}</td>
+          <td>#{source_tag(e)}</td>
         </tr>
         """
       end)
@@ -489,8 +495,9 @@ defmodule TrackConn.Report do
       <h2>Connection stability — logged spikes</h2>
       <p>#{length(events)} brief spike/loss event(s) caught by continuous sampling (~5×/sec) —
       the intermittent stutters that never show up in an "average" but ruin a call or game.</p>
+      #{source_summary(events)}
       <table class="spikes">
-        <thead><tr><th>When (UTC)</th><th>Where</th><th>What happened</th></tr></thead>
+        <thead><tr><th>When (<span class="tc-secret" data-tz-zone>UTC</span>)</th><th>Where</th><th>What happened</th><th>Likely source</th></tr></thead>
         <tbody>#{rows}</tbody>
       </table>
       #{if length(events) > 50, do: ~s(<p class="muted small">Showing the 50 most recent — the full list is in the spike-log CSV.</p>), else: ~s(<p class="muted small">Full list with exact values is in the spike-log CSV export.</p>)}
@@ -506,6 +513,39 @@ defmodule TrackConn.Report do
 
   defp spike_class("loss"), do: "loss-onset"
   defp spike_class(_), do: "latency-jump"
+
+  # A coloured tag attributing the event to its likely source. ISP-side events
+  # get the warning colour (the ones worth raising with your provider); local /
+  # host-freeze events are muted, so a machine hiccup logged on both segments no
+  # longer reads as an ISP fault.
+  defp source_tag(e) do
+    case Map.get(e, :source) do
+      nil ->
+        ""
+
+      source ->
+        ~s(<span class="src src-#{source}">#{esc(SpikeAnalysis.source_label(source))}</span>)
+    end
+  end
+
+  # One honest line: of all the logged spikes, how many were genuinely ISP-side
+  # versus local or a host freeze. Built from the same cross-tagging as the rows.
+  defp source_summary(events) do
+    %{isp: isp, local: local, host_freeze: freeze, total: total} = SpikeAnalysis.summarize(events)
+
+    if total == 0 do
+      ""
+    else
+      """
+      <p class="muted small">Of these, <strong>#{isp}</strong> were isolated to the open internet
+      (your ISP), <strong>#{local}</strong> coincided with a local-router spike (your machine / Wi-Fi),
+      and <strong>#{freeze}</strong> were multi-second stalls on both segments at once — almost
+      certainly your machine or Wi-Fi briefly freezing, not a network fault.
+      A spike that hits your router and the internet at the same instant can't be your provider:
+      it never left your house.</p>
+      """
+    end
+  end
 
   defp spike_detail(%{kind: "latency", peak_ms: peak, baseline_ms: base}),
     do: "Latency spiked to #{fmt_ms(peak)} (normal ~#{fmt_ms(base)})"
@@ -536,10 +576,16 @@ defmodule TrackConn.Report do
 
   defp footer_section(report) do
     wsl_note =
-      if report.wsl?,
-        do:
-          ~s(<p class="small muted">Note: running under WSL — the “router” hop may be the Windows host rather than the physical gateway.</p>),
-        else: ""
+      cond do
+        report.wsl_unresolved? ->
+          ~s(<p class="small muted">Note: running under WSL and the Windows host was unreachable, so the “router” hop is the WSL virtual switch rather than your physical gateway — set ROUTER_IP to fix attribution.</p>)
+
+        report.wsl? ->
+          ~s(<p class="small muted">Note: running under WSL — the “router” hop is your physical gateway, auto-detected from the Windows host.</p>)
+
+        true ->
+          ""
+      end
 
     targets =
       Enum.map_join(report.targets, "", fn {label, target} ->
@@ -809,6 +855,14 @@ defmodule TrackConn.Report do
     .zone.isp_edge, .zone.isp { color: var(--warn); }
     .zone.destination { color: var(--ok); }
     .zone.transit, .zone.unknown { color: var(--muted); }
+    /* Likely-source chips for the spike log — same shape as zone chips. ISP-side
+       events stand out (warn); local / host-freeze events are muted. */
+    .src { display: inline-flex; align-items: center; font-size: .72rem; font-weight: 600; padding: .1rem .5rem; border-radius: .4rem; white-space: nowrap;
+           border: 1px solid color-mix(in oklab, currentColor 30%, transparent); background: color-mix(in oklab, currentColor 13%, transparent); }
+    /* ISP-side events (the ones worth raising with your provider) get the warn
+       colour and stand out; local / host-freeze noise is muted so it recedes. */
+    .src-isp { color: var(--warn); }
+    .src-local, .src-host_freeze { color: var(--muted); }
     .muted { color: var(--muted); }
     .small { font-size: .82rem; }
     tr.healthy td:first-child { color: var(--ok); font-weight: 800; }

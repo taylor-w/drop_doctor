@@ -5,9 +5,10 @@ defmodule TrackConn.Targets do
   things go wrong is the core of the diagnosis.
 
   Targets are configurable via application config (`:track_conn, :targets`)
-  and the router can be overridden with the `ROUTER_IP` env var, which is the
-  recommended setting under WSL where the auto-detected gateway is the Windows
-  host rather than your physical router.
+  and the router can be overridden with the `ROUTER_IP` env var. Under WSL the
+  physical router is discovered automatically from the Windows host (see
+  `TrackConn.Net`), so `ROUTER_IP` is only needed there as a manual fallback
+  when the host can't be reached.
   """
 
   @doc """

@@ -64,72 +64,109 @@ defmodule TrackConn.Probes.Ping do
   end
 
   @doc """
-  Runs one high-rate burst of pings and returns the *per-packet* round-trip
-  times (plus sent/received for loss). This is what `TrackConn.SpikeMonitor`
-  calls back-to-back for continuous sampling — unlike `run/2`, which collapses a
-  burst to its average.
+  Starts a *continuous* ping as one long-lived OS process and forwards each
+  per-packet result to `owner` as a message. This is what `TrackConn.SpikeMonitor`
+  uses for gap-free stability sampling.
 
-  `interval` spacing is sub-second on Linux/macOS; Windows can't do sub-second
-  intervals unprivileged, so there it sends `count` packets at its ~1s default.
+  Why one resident process instead of repeated short bursts (the old approach):
+  spawning a fresh `ping` every couple of seconds makes the *measured* RTT
+  sensitive to host CPU scheduling — under load the short-lived process is
+  descheduled between sending a packet and reading its reply, and reports inflated
+  latency the network never saw. A single process that stays warm avoids that
+  per-burst startup cost and measures the wire, not the scheduler.
 
-  Returns `%{times: [float], sent: integer, received: integer, raw: String.t()}`.
+  Spawns a small reader process that owns the port and returns its pid. The caller
+  should `Process.monitor/1` it; killing it closes the port and stops the OS
+  `ping`. Messages delivered to `owner`:
+
+    * `{:stream_line, reader_pid, line}` — one raw output line (parse with `parse_stream_line/1`)
+    * `{:stream_down, reader_pid, reason}` — the ping process ended
+
+  `interval` is the spacing in seconds (Unix `-i`); Windows ignores it and runs at
+  its ~1s default.
   """
-  def burst(host, opts \\ []) do
-    count = Keyword.get(opts, :count, 10)
-    interval = Keyword.get(opts, :interval, 0.2)
-    timeout = Keyword.get(opts, :timeout, 1)
+  def stream(owner, host, opts \\ []) do
+    interval = Keyword.get(opts, :interval, 1.0)
+    spawn(fn -> run_stream(owner, host, interval) end)
+  end
 
-    try do
-      {cmd, args} = burst_command(host, count, interval, timeout)
+  defp run_stream(owner, host, interval) do
+    {cmd, args} = stream_command(host, interval)
+    path = System.find_executable(cmd) || cmd
 
-      case System.cmd(cmd, args, stderr_to_stdout: true) do
-        {out, _exit} ->
-          loss = parse_loss(out)
+    port =
+      Port.open({:spawn_executable, path}, [
+        :binary,
+        :exit_status,
+        :hide,
+        {:line, 2048},
+        args: args
+      ])
 
-          %{
-            times: packet_times(out),
-            sent: count,
-            received: parse_received(out, count, loss),
-            raw: String.trim(out)
-          }
+    stream_loop(owner, port)
+  rescue
+    e -> send(owner, {:stream_down, self(), Exception.message(e)})
+  end
 
-        _ ->
-          burst_failure(count)
-      end
-    rescue
-      e -> burst_failure(count, Exception.message(e))
+  defp stream_loop(owner, port) do
+    receive do
+      {^port, {:data, {:eol, line}}} ->
+        send(owner, {:stream_line, self(), line})
+        stream_loop(owner, port)
+
+      # A line longer than the buffer (shouldn't happen for ping) — skip the
+      # fragment rather than emit a half-parsed sample.
+      {^port, {:data, {:noeol, _partial}}} ->
+        stream_loop(owner, port)
+
+      {^port, {:exit_status, status}} ->
+        send(owner, {:stream_down, self(), {:exit_status, status}})
     end
   end
 
-  defp burst_command(host, count, interval, timeout) do
+  defp stream_command(host, interval) do
     case :os.type() do
       {:win32, _} ->
-        # No sub-second interval on Windows; -n sends `count` at the default ~1s.
-        {"ping", ["-n", to_string(count), "-w", to_string(timeout * 1000), host]}
+        # -t runs until stopped; Windows can't do sub-second spacing unprivileged.
+        {"ping", ["-t", host]}
 
       {:unix, :darwin} ->
-        total = max(1, round(interval * count) + timeout)
-
-        {"ping",
-         ["-c", to_string(count), "-i", to_string(interval), "-t", to_string(total), host]}
+        # macOS prints "Request timeout for icmp_seq N" on a missed reply by default.
+        {"ping", ["-i", to_string(interval), host]}
 
       {:unix, _} ->
-        {"ping",
-         ["-c", to_string(count), "-i", to_string(interval), "-W", to_string(timeout), host]}
+        # -O makes Linux emit a line for each *missing* reply, so loss is seen live.
+        {"ping", ["-O", "-i", to_string(interval), host]}
     end
   end
 
-  # Each reply line carries the per-packet time: "time=14.9 ms" (Unix) or
-  # "time=13ms" / "time<1ms" (Windows). Scan them all out of one burst.
-  defp packet_times(out) do
-    ~r/time[=<]\s*([\d.]+)\s*ms/i
-    |> Regex.scan(out)
-    |> Enum.map(fn [_, t] -> parse_float(t) end)
-    |> Enum.reject(&is_nil/1)
-  end
+  @doc """
+  Parses one line of continuous-`ping` output into a sample:
 
-  defp burst_failure(count, raw \\ "ping failed"),
-    do: %{times: [], sent: count, received: 0, raw: raw}
+    * `{:ok, rtt_ms}` — a reply carrying a round-trip time
+    * `:loss` — an explicit timeout / unreachable line
+    * `:ignore` — banners, the trailing statistics, blank lines
+
+  Public so this cross-platform, format-sensitive parsing can be regression-tested
+  against real per-line output the way `parse/2` is for the burst summary.
+  """
+  def parse_stream_line(line) do
+    case Regex.run(~r/time[=<]\s*([\d.]+)\s*ms/i, line) do
+      [_, t] ->
+        case parse_float(t) do
+          nil -> :ignore
+          rtt -> {:ok, rtt}
+        end
+
+      _ ->
+        if Regex.match?(
+             ~r/no answer yet|request timeout|request timed out|unreachable|100% packet loss/i,
+             line
+           ),
+           do: :loss,
+           else: :ignore
+    end
+  end
 
   @doc """
   Parses raw `ping` output into the result map. Public so the cross-platform

@@ -95,4 +95,34 @@ defmodule TrackConn.Probes.PingTest do
       assert r.jitter_ms == nil
     end
   end
+
+  describe "parse_stream_line/1 — one line of continuous ping" do
+    test "Linux/macOS reply line yields the round-trip time" do
+      assert Ping.parse_stream_line("64 bytes from 1.1.1.1: icmp_seq=1 ttl=55 time=14.9 ms") ==
+               {:ok, 14.9}
+    end
+
+    test "Windows reply line yields the round-trip time" do
+      assert Ping.parse_stream_line("Reply from 1.1.1.1: bytes=32 time=13ms TTL=55") ==
+               {:ok, 13.0}
+
+      assert Ping.parse_stream_line("Reply from 192.168.1.1: bytes=32 time<1ms TTL=64") ==
+               {:ok, 1.0}
+    end
+
+    test "timeout / unreachable lines are loss" do
+      assert Ping.parse_stream_line("no answer yet for icmp_seq=7") == :loss
+      assert Ping.parse_stream_line("Request timeout for icmp_seq 7") == :loss
+      assert Ping.parse_stream_line("Request timed out.") == :loss
+
+      assert Ping.parse_stream_line("From 10.0.0.1 icmp_seq=3 Destination Host Unreachable") ==
+               :loss
+    end
+
+    test "banners, stats and blank lines are ignored" do
+      assert Ping.parse_stream_line("PING 1.1.1.1 (1.1.1.1) 56(84) bytes of data.") == :ignore
+      assert Ping.parse_stream_line("--- 1.1.1.1 ping statistics ---") == :ignore
+      assert Ping.parse_stream_line("") == :ignore
+    end
+  end
 end

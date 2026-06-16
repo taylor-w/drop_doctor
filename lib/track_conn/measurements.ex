@@ -86,6 +86,19 @@ defmodule TrackConn.Measurements do
     |> Repo.all()
   end
 
+  @doc """
+  Spike events that occurred within `[from, to]`, oldest first — for overlaying
+  spike markers on the timeline window currently in view.
+  """
+  def spike_events_between(%DateTime{} = from, %DateTime{} = to) do
+    SpikeEvent
+    |> where([e], e.occurred_at >= ^from and e.occurred_at <= ^to)
+    |> order_by(asc: :occurred_at)
+    |> Repo.all()
+  end
+
+  def spike_events_between(_from, _to), do: []
+
   @doc "Total number of recorded spike events."
   def count_spike_events, do: Repo.aggregate(SpikeEvent, :count)
 

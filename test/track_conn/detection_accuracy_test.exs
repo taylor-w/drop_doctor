@@ -36,13 +36,12 @@ defmodule TrackConn.DetectionAccuracyTest do
 
       assert s.loss_pct == 0.0
       assert s.spike_count == 0
-      # Below the 5 ms "ideal competitive jitter" line → the sampler treats this
-      # as calm and relaxes its probe rate (see SpikeMonitor.adapt_interval).
+      # Comfortably below the 5 ms "ideal competitive jitter" line.
       assert s.jitter_ms < 5.0
 
-      # And against a known-good baseline, a fresh burst raises no event.
-      burst = %{times: [12.0, 12.1, 11.9, 12.0], sent: 4, received: 4}
-      assert Stability.burst_events(12.0, burst) == []
+      # And against a known-good baseline, a fresh batch raises no event.
+      batch = %{times: [12.0, 12.1, 11.9, 12.0], sent: 4, received: 4}
+      assert Stability.burst_events(12.0, batch) == []
     end
 
     test "merely-okay link (20–45 ms wobble): no discrete spike event raised" do
