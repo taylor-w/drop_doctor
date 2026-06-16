@@ -8,6 +8,18 @@ defmodule TrackConn.SpikeAnalysisTest do
     %SpikeEvent{segment: segment, host: "h", kind: "latency", occurred_at: at, peak_ms: peak}
   end
 
+  # An internet event carrying a corroboration verdict from the alternate anchor.
+  defp inet(at, corroborated) do
+    %SpikeEvent{
+      segment: "internet",
+      host: "h",
+      kind: "latency",
+      occurred_at: at,
+      peak_ms: 60.0,
+      corroborated: corroborated
+    }
+  end
+
   defp source_for(annotated, segment, at) do
     Enum.find(annotated, &(&1.segment == segment and &1.occurred_at == at)).source
   end
@@ -76,10 +88,34 @@ defmodule TrackConn.SpikeAnalysisTest do
 
     assert SpikeAnalysis.summarize(annotated) == %{
              isp: 1,
+             isp_unconfirmed: 0,
              local: 0,
              host_freeze: 2,
              total: 3
            }
+  end
+
+  describe "second-anchor corroboration of internet spikes" do
+    test "corroborated by the alt anchor -> confident ISP" do
+      [e] = SpikeAnalysis.annotate([inet(~U[2026-06-16 12:00:00Z], true)])
+      assert e.source == :isp
+    end
+
+    test "alt anchor stayed clean -> one route, not confidently your ISP" do
+      [e] = SpikeAnalysis.annotate([inet(~U[2026-06-16 12:00:00Z], false)])
+      assert e.source == :isp_unconfirmed
+    end
+
+    test "couldn't corroborate (nil) -> falls back to ISP (prior behaviour)" do
+      [e] = SpikeAnalysis.annotate([inet(~U[2026-06-16 12:00:00Z], nil)])
+      assert e.source == :isp
+    end
+
+    test "a router twin still wins over corroboration -> local, not ISP" do
+      t = ~U[2026-06-16 12:00:00Z]
+      annotated = SpikeAnalysis.annotate([inet(t, true), ev("router", t)])
+      assert source_for(annotated, "internet", t) == :local
+    end
   end
 
   test "annotate is order-independent and leaves an empty list empty" do

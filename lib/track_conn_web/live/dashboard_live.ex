@@ -8,7 +8,15 @@ defmodule TrackConnWeb.DashboardLive do
   """
   use TrackConnWeb, :live_view
 
-  alias TrackConn.{DeepDiagnostic, Measurements, Monitor, Net, SpikeAnalysis, SpikeMonitor, Targets}
+  alias TrackConn.{
+    DeepDiagnostic,
+    Measurements,
+    Monitor,
+    Net,
+    SpikeAnalysis,
+    SpikeMonitor,
+    Targets
+  }
 
   # How many sweeps the expanded timeline shows at once. The window pans across
   # the full recorded history (drag), anchored `tl_offset` sweeps back from now.
@@ -260,7 +268,7 @@ defmodule TrackConnWeb.DashboardLive do
             </span>
           </div>
         <% end %>
-
+        
     <!-- PIPELINE HERO — verdict banner with status wash + elevation -->
         <div class={"card overflow-hidden border border-base-300 tc-hero #{hero_tint(@verdict.status)}"}>
           <div class="card-body gap-5">
@@ -284,7 +292,7 @@ defmodule TrackConnWeb.DashboardLive do
                 </div>
               <% end %>
             </div>
-
+            
     <!-- The animated path (+ the measurement it reveals, kept together so the
                  panel collapses without leaving a gap) -->
             <div>
@@ -297,7 +305,7 @@ defmodule TrackConnWeb.DashboardLive do
                     </div>
                     <span class="text-xs font-semibold text-center leading-tight">{node.label}</span>
                   </div>
-
+                  
     <!-- Link (after every node except the last). Clicking reveals its raw
                        measurement below; the active link gets a soft chip + caret. -->
                   <%= if link = Enum.at(@links, i) do %>
@@ -326,7 +334,7 @@ defmodule TrackConnWeb.DashboardLive do
                   <% end %>
                 <% end %>
               </div>
-
+              
     <!-- The raw measurement, smoothly expanding/collapsing in place -->
               <div class={"tc-proof #{@proof_open && "tc-proof-open"}"}>
                 <div class="tc-proof-clip">
@@ -338,7 +346,9 @@ defmodule TrackConnWeb.DashboardLive do
                           <span class="truncate">{@proof_seg.label}</span>
                           <span class="opacity-40 hidden sm:inline">· live measurement</span>
                         </span>
-                        <span class={"font-mono shrink-0 #{status_text(@proof_seg.state)}"}>{@proof_seg.summary}</span>
+                        <span class={"font-mono shrink-0 #{status_text(@proof_seg.state)}"}>
+                          {@proof_seg.summary}
+                        </span>
                       </div>
                       <%= if @proof_seg.key == :usable do %>
                         <pre class="tc-cmd-body tc-secret">{@segs_by_key.dns.raw}
@@ -359,7 +369,7 @@ defmodule TrackConnWeb.DashboardLive do
             <% end %>
           </div>
         </div>
-
+        
     <!-- BENTO GRID -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <!-- Stability -->
@@ -378,10 +388,18 @@ defmodule TrackConnWeb.DashboardLive do
                       </div>
                     <% %{sample_count: n} = st when n > 0 -> %>
                       <div class="grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-xs">
-                        <div class="flex justify-between"><span class="opacity-50">jitter</span><span>{fmt_ms(st.jitter_ms)}</span></div>
-                        <div class="flex justify-between"><span class="opacity-50">p99</span><span>{fmt_ms(st.p99_ms)}</span></div>
-                        <div class="flex justify-between"><span class="opacity-50">spikes</span><span>{st.spike_count}</span></div>
-                        <div class="flex justify-between"><span class="opacity-50">loss</span><span>{fmt_pct(st.loss_pct)}</span></div>
+                        <div class="flex justify-between">
+                          <span class="opacity-50">jitter</span><span>{fmt_ms(st.jitter_ms)}</span>
+                        </div>
+                        <div class="flex justify-between">
+                          <span class="opacity-50">p99</span><span>{fmt_ms(st.p99_ms)}</span>
+                        </div>
+                        <div class="flex justify-between">
+                          <span class="opacity-50">spikes</span><span>{st.spike_count}</span>
+                        </div>
+                        <div class="flex justify-between">
+                          <span class="opacity-50">loss</span><span>{fmt_pct(st.loss_pct)}</span>
+                        </div>
                       </div>
                     <% _ -> %>
                       <div class="text-xs opacity-40 font-mono">sampling…</div>
@@ -393,7 +411,7 @@ defmodule TrackConnWeb.DashboardLive do
               </p>
             </div>
           </div>
-
+          
     <!-- History -->
           <div class="card border border-base-300 tc-panel">
             <div class="card-body gap-3">
@@ -434,7 +452,7 @@ defmodule TrackConnWeb.DashboardLive do
               </div>
             </div>
           </div>
-
+          
     <!-- Save proof -->
           <div class="card border border-base-300 tc-panel">
             <div class="card-body gap-3">
@@ -442,10 +460,17 @@ defmodule TrackConnWeb.DashboardLive do
                 <.lucide name="file-text" class="size-4" /> Save proof for your ISP
               </h3>
               <p class="text-xs opacity-60 leading-snug">
-                A timestamped report with the verdict, per-segment evidence, your latest trace, and every spike caught between checks{spike_count_phrase(@spike_events)}.
+                A timestamped report with the verdict, per-segment evidence, your latest trace, and every spike caught between checks{spike_count_phrase(
+                  @spike_events
+                )}.
               </p>
               <div class="flex flex-col gap-2 mt-auto">
-                <a href="/report" target="_blank" rel="noopener" class="btn btn-sm tc-btn tc-btn-primary justify-start">
+                <a
+                  href="/report"
+                  target="_blank"
+                  rel="noopener"
+                  class="btn btn-sm tc-btn tc-btn-primary justify-start"
+                >
                   <.lucide name="file-text" class="size-4" /> Open report (Save as PDF)
                 </a>
                 <a href="/report.csv" download class="btn btn-sm tc-btn justify-start">
@@ -466,13 +491,14 @@ defmodule TrackConnWeb.DashboardLive do
             </div>
           </div>
         </div>
-
+        
     <!-- Deep diagnostic (per-hop trace) -->
         <div class="card border border-base-300 tc-panel">
           <div class="card-body gap-3">
             <div class="flex items-center justify-between flex-wrap gap-2">
               <h3 class="text-sm font-semibold flex items-center gap-2 pb-2 mb-1 border-b border-base-300">
-                <.lucide name="route" class="size-4" /> Deep diagnostic — per-hop trace to {@deep.target}
+                <.lucide name="route" class="size-4" />
+                Deep diagnostic — per-hop trace to {@deep.target}
               </h3>
               <button
                 class="btn btn-sm tc-btn"
@@ -514,9 +540,13 @@ defmodule TrackConnWeb.DashboardLive do
         <p class="text-center text-xs opacity-40">
           Monitoring {if @running, do: "every 5s", else: "paused"} · {@total_all} sweeps recorded<%= case List.first(@history) do %>
             <% %{inserted_at: at} -> %>
-              · last check <span class="tc-secret" data-utc={utc_iso(at)} data-utc-style="time">{fmt_time(at)}</span>
+              · last check
+              <span class="tc-secret" data-utc={utc_iso(at)} data-utc-style="time">
+                {fmt_time(at)}
+              </span>
             <% _ -> %>
-          <% end %> · open source
+          <% end %>
+          · open source
         </p>
       </div>
 
@@ -545,7 +575,8 @@ defmodule TrackConnWeb.DashboardLive do
       phx-window-keydown="close_timeline"
       phx-key="Escape"
     >
-      <div class="tl-overlay absolute inset-0 bg-black/60 backdrop-blur-sm" phx-click="close_timeline"></div>
+      <div class="tl-overlay absolute inset-0 bg-black/60 backdrop-blur-sm" phx-click="close_timeline">
+      </div>
       <div class="tl-modal relative card border border-base-300 tc-panel w-full max-w-5xl max-h-[90vh] overflow-auto">
         <div class="card-body gap-4">
           <div class="flex items-center justify-between gap-2 flex-wrap">
@@ -579,8 +610,9 @@ defmodule TrackConnWeb.DashboardLive do
             <strong>ISP adds beyond your router</strong>
             — when it swells, the problem is past your equipment. A bump in <em>both</em>
             lines at once is local (your machine or Wi-Fi), not your provider.
-            Vertical ticks mark brief spikes the smoothed line averages away —
-            <strong>amber</strong> for your ISP, <strong>grey</strong> for local; dashed ticks are packet loss.
+            Vertical ticks mark brief spikes the smoothed line averages away — <strong>amber</strong>
+            for your ISP, <strong>grey</strong>
+            for local; dashed ticks are packet loss.
           </p>
 
           <%= if @timeline_rows == [] do %>
@@ -604,17 +636,27 @@ defmodule TrackConnWeb.DashboardLive do
                 style={"touch-action: none; aspect-ratio: #{@tl.w} / #{@tl.h}"}
               >
               </div>
-              <span class="tl-muted absolute top-0 left-1 text-[10px] opacity-50 font-mono pointer-events-none">{round(@tl.max)}ms</span>
-              <span class="tl-muted absolute bottom-0 left-1 text-[10px] opacity-50 font-mono pointer-events-none">0ms</span>
+              <span class="tl-muted absolute top-0 left-1 text-[10px] opacity-50 font-mono pointer-events-none">
+                {round(@tl.max)}ms
+              </span>
+              <span class="tl-muted absolute bottom-0 left-1 text-[10px] opacity-50 font-mono pointer-events-none">
+                0ms
+              </span>
             </div>
 
             <div class="tl-muted flex justify-between text-[10px] opacity-50 font-mono">
               <span>
-                older · <span class="tc-secret" data-utc={utc_iso(@tl.first_at)} data-utc-style="time">{fmt_time(@tl.first_at)}</span>
+                older ·
+                <span class="tc-secret" data-utc={utc_iso(@tl.first_at)} data-utc-style="time">
+                  {fmt_time(@tl.first_at)}
+                </span>
               </span>
               <span>{@tl.n} sweeps · ~{@tl.minutes} min</span>
               <span>
-                <span class="tc-secret" data-utc={utc_iso(@tl.last_at)} data-utc-style="time">{fmt_time(@tl.last_at)}</span> · newer
+                <span class="tc-secret" data-utc={utc_iso(@tl.last_at)} data-utc-style="time">
+                  {fmt_time(@tl.last_at)}
+                </span>
+                · newer
               </span>
             </div>
 
@@ -623,13 +665,20 @@ defmodule TrackConnWeb.DashboardLive do
                 <span class="inline-block w-4 h-0.5 bg-primary"></span> Internet (total)
               </span>
               <span class="flex items-center gap-1.5">
-                <span class="inline-block w-4 h-0 border-t border-dashed border-base-content/50"></span> Router (local)
+                <span class="inline-block w-4 h-0 border-t border-dashed border-base-content/50">
+                </span>
+                Router (local)
               </span>
               <span class="flex items-center gap-1.5">
-                <span class="inline-block w-3 h-2.5 bg-warning/30"></span> ISP added (internet − router)
+                <span class="inline-block w-3 h-2.5 bg-warning/30"></span>
+                ISP added (internet − router)
               </span>
               <span class="flex items-center gap-1.5">
-                <span class="inline-block size-2 rounded-full bg-warning"></span> ISP spike
+                <span class="inline-block size-2 rounded-full bg-warning"></span>
+                ISP spike (confirmed)
+              </span>
+              <span class="flex items-center gap-1.5">
+                <span class="inline-block size-2 rounded-full bg-warning/60"></span> One route only
               </span>
               <span class="flex items-center gap-1.5">
                 <span class="inline-block size-2 rounded-full bg-base-content/50"></span> Local spike
@@ -749,18 +798,20 @@ defmodule TrackConnWeb.DashboardLive do
             const marks = (d.markers || []).map((m) =>
               `<rect x="${m.x - 1.5}" y="0" width="3" height="${h}" class="tl-marker ${m.status === "down" ? "text-error" : "text-warning"}" fill="currentColor" fill-opacity="0.14"/>`
             ).join("")
-            // Logged spike/loss events as vertical ticks: amber = your ISP (the
-            // ones worth raising), muted = local (machine/Wi-Fi); dashed = brief
-            // packet loss. A <title> gives a hover tooltip with the detail.
+            // Logged spike/loss events as vertical ticks: amber = your ISP
+            // (confirmed across two providers), faint amber = one route only
+            // (not proven provider-wide), muted = local (machine/Wi-Fi); dashed =
+            // brief packet loss. A <title> gives a hover tooltip with the detail.
             const esc = (s) => String(s).replace(/[<&>]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]))
             const spikes = (d.spikes || []).map((s) => {
               const isp = s.source === "isp"
-              const cls = isp ? "text-warning" : "text-base-content/50"
+              const oneRoute = s.source === "isp_unconfirmed"
+              const cls = isp ? "text-warning" : oneRoute ? "text-warning/60" : "text-base-content/50"
               const dash = s.kind === "loss" ? `stroke-dasharray="2 3"` : ""
-              const op = isp ? 0.6 : 0.4
+              const op = isp ? 0.6 : oneRoute ? 0.5 : 0.4
               return `<g class="tl-spike ${cls}"><title>${esc(s.label)}</title>` +
                 `<line x1="${s.x}" x2="${s.x}" y1="10" y2="${h}" stroke="currentColor" stroke-width="1" stroke-opacity="${op}" ${dash} vector-effect="non-scaling-stroke"/>` +
-                `<circle cx="${s.x}" cy="7" r="3" fill="currentColor" fill-opacity="${isp ? 0.95 : 0.65}"/>` +
+                `<circle cx="${s.x}" cy="7" r="3" fill="currentColor" fill-opacity="${isp ? 0.95 : oneRoute ? 0.8 : 0.65}"/>` +
               `</g>`
             }).join("")
             this.content.innerHTML =
@@ -921,7 +972,10 @@ defmodule TrackConnWeb.DashboardLive do
   # Polygon spanning internet (top, left→right) then router (bottom, right→left)
   # — the filled area is the ISP's latency contribution over time.
   defp tl_band(inet, rtr, max, n) do
-    top = inet |> Enum.with_index() |> Enum.map(fn {v, i} -> "#{r1(tl_x(i, n))},#{r1(tl_y(v, max))}" end)
+    top =
+      inet
+      |> Enum.with_index()
+      |> Enum.map(fn {v, i} -> "#{r1(tl_x(i, n))},#{r1(tl_y(v, max))}" end)
 
     bottom =
       rtr
@@ -1026,10 +1080,12 @@ defmodule TrackConnWeb.DashboardLive do
       ~S(<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>)
 
   defp lucide_paths("activity"),
-    do: ~S(<path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/>)
+    do:
+      ~S(<path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/>)
 
   defp lucide_paths("bar-chart"),
-    do: ~S(<line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/>)
+    do:
+      ~S(<line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/>)
 
   defp lucide_paths("maximize-2"),
     do:

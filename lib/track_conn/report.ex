@@ -125,7 +125,7 @@ defmodule TrackConn.Report do
   end
 
   @spikes_csv_columns ~w(
-    timestamp_utc segment host kind peak_ms baseline_ms loss_pct samples source co_occurring
+    timestamp_utc segment host kind peak_ms baseline_ms loss_pct samples source co_occurring corroborated
   )
 
   @doc """
@@ -154,7 +154,8 @@ defmodule TrackConn.Report do
       e.loss_pct,
       e.samples,
       Map.get(e, :source),
-      Map.get(e, :co_occurring?)
+      Map.get(e, :co_occurring?),
+      Map.get(e, :corroborated)
     ]
     |> Enum.map(&csv_field/1)
     |> Enum.join(",")
@@ -531,14 +532,18 @@ defmodule TrackConn.Report do
   # One honest line: of all the logged spikes, how many were genuinely ISP-side
   # versus local or a host freeze. Built from the same cross-tagging as the rows.
   defp source_summary(events) do
-    %{isp: isp, local: local, host_freeze: freeze, total: total} = SpikeAnalysis.summarize(events)
+    %{isp: isp, isp_unconfirmed: one_route, local: local, host_freeze: freeze, total: total} =
+      SpikeAnalysis.summarize(events)
 
     if total == 0 do
       ""
     else
       """
-      <p class="muted small">Of these, <strong>#{isp}</strong> were isolated to the open internet
-      (your ISP), <strong>#{local}</strong> coincided with a local-router spike (your machine / Wi-Fi),
+      <p class="muted small">Of these, <strong>#{isp}</strong> were confirmed across a second
+      provider's path at the same instant — provider-wide, so genuinely your ISP;
+      <strong>#{one_route}</strong> hit only the one route while a second provider stayed clean
+      (likely a single destination or peering issue, not your whole ISP);
+      <strong>#{local}</strong> coincided with a local-router spike (your machine / Wi-Fi),
       and <strong>#{freeze}</strong> were multi-second stalls on both segments at once — almost
       certainly your machine or Wi-Fi briefly freezing, not a network fault.
       A spike that hits your router and the internet at the same instant can't be your provider:
@@ -862,6 +867,9 @@ defmodule TrackConn.Report do
     /* ISP-side events (the ones worth raising with your provider) get the warn
        colour and stand out; local / host-freeze noise is muted so it recedes. */
     .src-isp { color: var(--warn); }
+    /* Confirmed on one route only — real, but not proven provider-wide, so it
+       reads cooler than a corroborated ISP fault. */
+    .src-isp_unconfirmed { color: color-mix(in oklab, var(--warn) 50%, var(--muted)); }
     .src-local, .src-host_freeze { color: var(--muted); }
     .muted { color: var(--muted); }
     .small { font-size: .82rem; }

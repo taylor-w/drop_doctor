@@ -46,6 +46,10 @@ defmodule TrackConn.SpikeMonitor do
   # If the ping process dies sooner than this after starting, treat it as the OS
   # refusing our (sub-second) interval — see `maybe_raise_floor/2`.
   @fast_death_ms 1_500
+  # Latency-spike threshold for corroboration, mirroring `Stability`'s spike rule
+  # (> 2.5× the norm and ≥ 30ms over it) so the alt anchor is judged the same way.
+  @spike_ratio 2.5
+  @spike_floor_ms 30
 
   @doc "PubSub topic carrying `{:stability, key, stats}` updates."
   def topic, do: @topic
@@ -95,6 +99,11 @@ defmodule TrackConn.SpikeMonitor do
       key: Keyword.fetch!(opts, :key),
       host: hd(hosts),
       hosts: hosts,
+      # A second reachable anchor (a *different* provider) used to corroborate
+      # internet spikes: if it degraded at the same moment the problem is
+      # provider-wide (your ISP); if it stayed clean it's just that one route.
+      # Picked alongside the primary; nil when only one anchor is reachable.
+      alt_host: nil,
       # Reachability check used to pick a live anchor; injectable for tests.
       reach_fun: Keyword.get(opts, :reach_fun, &reachable?/1),
       interval: Keyword.get(opts, :interval, @interval),
@@ -161,32 +170,40 @@ defmodule TrackConn.SpikeMonitor do
   def handle_info(:restart_stream, state), do: {:noreply, start_stream(state)}
 
   # Probe the candidate hosts off-process (a reachability check can block ~1s/host)
-  # and report back the first that answers. Done once, shortly after boot.
+  # and report back which answered, in preference order. Done once, after boot.
   def handle_info(:select_host, state) do
     parent = self()
     hosts = state.hosts
     reach = state.reach_fun
-    spawn(fn -> if h = Enum.find(hosts, reach), do: send(parent, {:host_selected, h}) end)
+    spawn(fn -> send(parent, {:hosts_selected, Enum.filter(hosts, reach)}) end)
     {:noreply, state}
   end
 
-  # Already sampling the chosen host — nothing to do.
-  def handle_info({:host_selected, host}, %{host: host} = state), do: {:noreply, state}
+  # The first reachable anchor becomes the primary the resident stream samples;
+  # the next reachable one (a different provider) becomes the corroborator.
+  def handle_info({:hosts_selected, reachable}, state) do
+    primary = List.first(reachable) || state.host
+    alt = Enum.find(reachable, &(&1 != primary))
+    state = %{state | alt_host: alt}
 
-  # Switch the resident stream to the reachable anchor and start its window fresh.
-  def handle_info({:host_selected, host}, %{running: true} = state) do
-    state =
-      state
-      |> stop_stream()
-      |> Map.merge(%{host: host, samples: [], pending: [], stats: Stability.empty()})
-      |> start_stream()
+    if primary != state.host and state.running do
+      state =
+        state
+        |> stop_stream()
+        |> Map.merge(%{host: primary, samples: [], pending: [], stats: Stability.empty()})
+        |> start_stream()
 
-    Phoenix.PubSub.broadcast(TrackConn.PubSub, @topic, {:stability, state.key, state.stats})
-    Logger.info("spike monitor (#{state.key}): sampling #{host} — first reachable anchor")
-    {:noreply, state}
+      Phoenix.PubSub.broadcast(TrackConn.PubSub, @topic, {:stability, state.key, state.stats})
+
+      Logger.info(
+        "spike monitor (#{state.key}): sampling #{primary} (corroborate: #{alt || "—"})"
+      )
+
+      {:noreply, state}
+    else
+      {:noreply, state}
+    end
   end
-
-  def handle_info({:host_selected, host}, state), do: {:noreply, %{state | host: host}}
 
   def handle_info(_msg, state), do: {:noreply, state}
 
@@ -231,7 +248,7 @@ defmodule TrackConn.SpikeMonitor do
     result = %{times: times, sent: length(batch), received: length(times)}
 
     baseline = Aggregate.median(for {:ok, ms} <- state.samples, do: ms)
-    log_events(state, Stability.burst_events(baseline, result))
+    log_events(state, Stability.burst_events(baseline, result), baseline)
 
     samples = Enum.take(state.samples ++ batch, -state.window)
     stats = Stability.summarize(samples)
@@ -240,24 +257,60 @@ defmodule TrackConn.SpikeMonitor do
     %{state | pending: [], samples: samples, stats: stats}
   end
 
-  defp log_events(%{persist: false}, _events), do: :ok
-  defp log_events(_state, []), do: :ok
+  defp log_events(%{persist: false}, _events, _baseline), do: :ok
+  defp log_events(_state, [], _baseline), do: :ok
 
-  defp log_events(state, events) do
-    now = DateTime.utc_now()
+  # Internet events get corroborated against the alternate anchor before they're
+  # recorded. The probe (and the DB writes) run off the GenServer so sampling is
+  # never blocked; one probe per flush covers all of that flush's events.
+  defp log_events(%{key: :internet, alt_host: alt} = state, events, baseline)
+       when is_binary(alt) do
+    base = event_base(state)
 
-    for event <- events do
-      event
-      |> Map.merge(%{
-        kind: to_string(event.kind),
-        occurred_at: now,
-        segment: to_string(state.key),
-        host: state.host
-      })
-      |> Measurements.record_spike_event()
-    end
+    spawn(fn ->
+      corroborated = corroborate(alt, baseline)
+      Enum.each(events, &record_event(&1, base, corroborated))
+    end)
 
     :ok
+  end
+
+  defp log_events(state, events, _baseline) do
+    base = event_base(state)
+    Enum.each(events, &record_event(&1, base, nil))
+    :ok
+  end
+
+  defp event_base(state),
+    do: %{occurred_at: DateTime.utc_now(), segment: to_string(state.key), host: state.host}
+
+  defp record_event(event, base, corroborated) do
+    event
+    |> Map.merge(base)
+    |> Map.merge(%{kind: to_string(event.kind), corroborated: corroborated})
+    |> Measurements.record_spike_event()
+  end
+
+  # Probe the alternate anchor, then judge it with `alt_verdict/2`.
+  defp corroborate(alt, baseline), do: alt_verdict(Ping.run(alt, count: 3, timeout: 1), baseline)
+
+  @doc """
+  Given the alternate anchor's ping result and the primary's baseline, decide
+  whether it corroborates the spike. Public for unit testing.
+
+    * `true`  — it lost packets or spiked too → the fault is provider-wide (ISP)
+    * `false` — it stayed clean → just this one route degraded, not your whole ISP
+    * `nil`   — it didn't answer at all → can't corroborate either way
+  """
+  def alt_verdict(res, baseline) do
+    floor = max(baseline || 0, @spike_floor_ms) * @spike_ratio
+
+    cond do
+      not is_number(res[:rtt_ms]) -> nil
+      is_number(res[:loss_pct]) and res[:loss_pct] > 0 -> true
+      is_number(res[:max_rtt_ms]) and res[:max_rtt_ms] > floor -> true
+      true -> false
+    end
   end
 
   # macOS (and some hardened Linux) reject sub-second intervals for non-root

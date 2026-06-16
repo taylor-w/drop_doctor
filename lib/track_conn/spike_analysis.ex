@@ -68,16 +68,19 @@ defmodule TrackConn.SpikeAnalysis do
       e
       |> Map.put(:co_occurring?, co?)
       |> Map.put(:artifact?, artifact?)
-      |> Map.put(:source, classify(e.segment, co?, artifact?))
+      |> Map.put(:source, classify(e.segment, co?, artifact?, Map.get(e, :corroborated)))
     end)
   end
 
   @doc """
-  Counts annotated events by source — `%{isp:, local:, host_freeze:, total:}`.
-  Handy for a one-line "of N spikes, X were ISP-side" summary.
+  Counts annotated events by source — `%{isp:, isp_unconfirmed:, local:,
+  host_freeze:, total:}`. Handy for a one-line "of N spikes, X were ISP-side"
+  summary.
   """
   def summarize(annotated) do
-    Enum.reduce(annotated, %{isp: 0, local: 0, host_freeze: 0, total: 0}, fn e, acc ->
+    empty = %{isp: 0, isp_unconfirmed: 0, local: 0, host_freeze: 0, total: 0}
+
+    Enum.reduce(annotated, empty, fn e, acc ->
       acc
       |> Map.update!(:total, &(&1 + 1))
       |> Map.update!(e.source, &(&1 + 1))
@@ -86,16 +89,23 @@ defmodule TrackConn.SpikeAnalysis do
 
   @doc "Human label for a source tag."
   def source_label(:isp), do: "Your ISP"
+  def source_label(:isp_unconfirmed), do: "Open internet — one route"
   def source_label(:local), do: "Local (machine / Wi-Fi)"
   def source_label(:host_freeze), do: "Local — host/Wi-Fi freeze"
   def source_label(_), do: "—"
 
-  # internet spike alone → past your equipment; a co-occurring spike big enough to
-  # be a stall is a host freeze; anything else co-occurring (or any router spike,
-  # since the router *is* the local hop) is local.
-  defp classify("internet", false, false), do: :isp
-  defp classify(_segment, _co?, true), do: :host_freeze
-  defp classify(_segment, _co?, _artifact?), do: :local
+  # A co-occurring spike big enough to be a stall is a host freeze; anything
+  # co-occurring with the router (the local hop) is local. An internet spike with
+  # no router twin is past your equipment — but only *confidently* your ISP if a
+  # second provider's anchor degraded at the same instant (`corroborated == true`).
+  # If the other anchor stayed clean it's just that one route (`false`); if we
+  # couldn't corroborate (`nil`) we keep the prior behaviour and call it ISP.
+  defp classify(_segment, true, true, _corrob), do: :host_freeze
+  defp classify("router", _co?, _artifact?, _corrob), do: :local
+  defp classify("internet", true, _artifact?, _corrob), do: :local
+  defp classify("internet", false, _artifact?, false), do: :isp_unconfirmed
+  defp classify("internet", false, _artifact?, _corrob), do: :isp
+  defp classify(_segment, _co?, _artifact?, _corrob), do: :local
 
   defp segment_ms(events, segment) do
     for e <- events, e.segment == segment, do: event_ms(e)

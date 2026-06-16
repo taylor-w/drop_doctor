@@ -228,7 +228,7 @@ defmodule TrackConn.ReportTest do
       lines = String.split(csv, "\r\n", trim: true)
 
       assert hd(lines) ==
-               "timestamp_utc,segment,host,kind,peak_ms,baseline_ms,loss_pct,samples,source,co_occurring"
+               "timestamp_utc,segment,host,kind,peak_ms,baseline_ms,loss_pct,samples,source,co_occurring,corroborated"
 
       assert length(lines) == 3
       # oldest (the loss event) first
@@ -244,7 +244,7 @@ defmodule TrackConn.ReportTest do
         |> Report.spikes_csv()
 
       assert csv ==
-               "timestamp_utc,segment,host,kind,peak_ms,baseline_ms,loss_pct,samples,source,co_occurring\r\n"
+               "timestamp_utc,segment,host,kind,peak_ms,baseline_ms,loss_pct,samples,source,co_occurring,corroborated\r\n"
     end
 
     test "HTML report includes a stability section listing the events" do

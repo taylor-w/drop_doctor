@@ -18,7 +18,8 @@ defmodule TrackConn.Measurements.SpikeEvent do
              :peak_ms,
              :baseline_ms,
              :loss_pct,
-             :samples
+             :samples,
+             :corroborated
            ]}
 
   schema "spike_events" do
@@ -35,11 +36,25 @@ defmodule TrackConn.Measurements.SpikeEvent do
     field :loss_pct, :float
     # How many packets the triggering burst contained.
     field :samples, :integer
+    # Internet events only: was the disturbance confirmed against a second
+    # provider's anchor? true = provider-wide (confident ISP), false = one route
+    # only, nil = couldn't corroborate (router events / no second anchor).
+    field :corroborated, :boolean
 
     timestamps(type: :utc_datetime_usec, updated_at: false)
   end
 
-  @fields [:occurred_at, :segment, :host, :kind, :peak_ms, :baseline_ms, :loss_pct, :samples]
+  @fields [
+    :occurred_at,
+    :segment,
+    :host,
+    :kind,
+    :peak_ms,
+    :baseline_ms,
+    :loss_pct,
+    :samples,
+    :corroborated
+  ]
 
   def changeset(event, attrs) do
     event

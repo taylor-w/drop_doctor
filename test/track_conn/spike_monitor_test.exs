@@ -76,6 +76,28 @@ defmodule TrackConn.SpikeMonitorTest do
     assert SpikeMonitor.stats(:test).sample_count > 0
   end
 
+  describe "alt_verdict/2 — second-anchor corroboration decision" do
+    test "alt clean -> false (one route, not provider-wide)" do
+      assert SpikeMonitor.alt_verdict(%{rtt_ms: 20.0, loss_pct: 0.0, max_rtt_ms: 24.0}, 20.0) ==
+               false
+    end
+
+    test "alt also losing packets -> true (provider-wide)" do
+      assert SpikeMonitor.alt_verdict(%{rtt_ms: 21.0, loss_pct: 33.0, max_rtt_ms: 25.0}, 20.0) ==
+               true
+    end
+
+    test "alt also spiking well above the norm -> true" do
+      assert SpikeMonitor.alt_verdict(%{rtt_ms: 22.0, loss_pct: 0.0, max_rtt_ms: 180.0}, 20.0) ==
+               true
+    end
+
+    test "alt unreachable (no reply) -> nil (can't corroborate)" do
+      assert SpikeMonitor.alt_verdict(%{rtt_ms: nil, loss_pct: 100.0, max_rtt_ms: nil}, 20.0) ==
+               nil
+    end
+  end
+
   test "timeout lines in the stream surface as packet loss" do
     timeout = "Request timed out."
 
