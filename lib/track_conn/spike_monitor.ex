@@ -302,15 +302,18 @@ defmodule TrackConn.SpikeMonitor do
 
   defp icmp_silent?(samples), do: not Enum.any?(samples, &match?({:ok, _}, &1))
 
-  # In TCP-fallback mode a "loss" is a connect that didn't finish the handshake
-  # in time — a retransmit-and-recover blip, not packet loss the user would feel.
-  # Logging it as a loss burst is noise (and alarming in an ISP report), so drop
-  # loss events here; genuine TCP-unreachability is caught by the 5s sweep. Real
-  # latency spikes still log.
-  defp loggable_events(%{probe_mode: :tcp}, events),
+  @doc """
+  Filters which detected events are worth recording for the current probe mode.
+  In TCP-fallback mode a "loss" is a connect that didn't finish the handshake in
+  time — a retransmit-and-recover blip, not packet loss the user would feel — so
+  it's dropped (logging it is noise, and alarming in an ISP report); genuine
+  TCP-unreachability is caught by the 5s sweep, and real latency spikes still
+  log. ICMP mode keeps everything. Public for unit testing.
+  """
+  def loggable_events(%{probe_mode: :tcp}, events),
     do: Enum.reject(events, &(&1.kind == :loss))
 
-  defp loggable_events(_state, events), do: events
+  def loggable_events(_state, events), do: events
 
   defp log_events(%{persist: false}, _events, _baseline), do: :ok
   defp log_events(_state, [], _baseline), do: :ok

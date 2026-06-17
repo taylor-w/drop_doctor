@@ -123,6 +123,20 @@ defmodule TrackConn.SpikeMonitorTest do
     assert SpikeMonitor.stats(:tcpswitch).rtt_ms == 5.0
   end
 
+  describe "loggable_events/2 — TCP-mode loss suppression" do
+    test "TCP mode drops loss events but keeps latency spikes" do
+      events = [%{kind: :latency, peak_ms: 120.0}, %{kind: :loss, loss_pct: 10.0}]
+      assert SpikeMonitor.loggable_events(%{probe_mode: :tcp}, events) == [
+               %{kind: :latency, peak_ms: 120.0}
+             ]
+    end
+
+    test "ICMP mode keeps everything" do
+      events = [%{kind: :latency, peak_ms: 120.0}, %{kind: :loss, loss_pct: 10.0}]
+      assert SpikeMonitor.loggable_events(%{probe_mode: :icmp}, events) == events
+    end
+  end
+
   defp eventually(fun, tries \\ 60) do
     Enum.reduce_while(1..tries, false, fn _, _ ->
       if fun.() do
