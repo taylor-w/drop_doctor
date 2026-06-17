@@ -56,7 +56,7 @@ defmodule TrackConn.Targets do
 
   @doc "The router/gateway IP we'll probe, honoring ROUTER_IP then auto-detection."
   def router_target do
-    System.get_env("ROUTER_IP") ||
+    blank_to_nil(System.get_env("ROUTER_IP")) ||
       get_in(config(), [:router]) ||
       TrackConn.Net.default_gateway() ||
       "192.168.1.1"
@@ -77,12 +77,19 @@ defmodule TrackConn.Targets do
   """
   def internet_anchors do
     cond do
-      ip = System.get_env("INTERNET_IP") -> [ip]
-      list = get_in(config(), [:internet_anchors]) -> list
+      ip = blank_to_nil(System.get_env("INTERNET_IP")) -> [ip]
+      (list = get_in(config(), [:internet_anchors])) not in [nil, []] -> list
       single = get_in(config(), [:internet]) -> [single]
       true -> @default_internet_anchors
     end
   end
+
+  # An env var set to "" is effectively unset; treat it as nil so it falls through
+  # to config/defaults rather than becoming a bogus [""] anchor (which would make
+  # internet_target/0 = hd([""]) probe an empty host, or hd([]) crash boot).
+  defp blank_to_nil(nil), do: nil
+  defp blank_to_nil(""), do: nil
+  defp blank_to_nil(str), do: str
 
   @doc "The primary internet anchor — for display and the continuous sampler."
   def internet_target, do: hd(internet_anchors())
