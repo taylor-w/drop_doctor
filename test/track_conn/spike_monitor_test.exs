@@ -92,9 +92,15 @@ defmodule TrackConn.SpikeMonitorTest do
                true
     end
 
-    test "alt unreachable (no reply) -> nil (can't corroborate)" do
+    test "alt also fully down (100% loss) -> true (both providers lost packets → provider-wide)" do
+      # Total loss must corroborate at least as strongly as partial loss; the old
+      # ordering let the rtt_ms-nil guard fire first and mislabel this as nil.
       assert SpikeMonitor.alt_verdict(%{rtt_ms: nil, loss_pct: 100.0, max_rtt_ms: nil}, 20.0) ==
-               nil
+               true
+    end
+
+    test "alt gave no measurement at all -> nil (can't corroborate)" do
+      assert SpikeMonitor.alt_verdict(%{rtt_ms: nil, loss_pct: nil, max_rtt_ms: nil}, 20.0) == nil
     end
   end
 
@@ -121,11 +127,53 @@ defmodule TrackConn.SpikeMonitorTest do
     # TCP stream, real replies start landing.
     assert eventually(fn -> SpikeMonitor.stats(:tcpswitch).received > 0 end)
     assert SpikeMonitor.stats(:tcpswitch).rtt_ms == 5.0
+    assert SpikeMonitor.stats(:tcpswitch).mode == :tcp
+  end
+
+  test "a host that has answered ICMP is never downgraded to TCP, even after going silent" do
+    # One real reply (so icmp_seen latches), then permanent silence. Past the
+    # give-up threshold the window is all-loss, but because the host proved it
+    # answers ICMP it must keep trying ICMP and never adopt the TCP stream — so a
+    # transient outage can't permanently downgrade a normally-ICMP anchor.
+    reply_then_silent = fn owner, _host, _opts ->
+      spawn(fn ->
+        send(owner, {:stream_line, self(), @reply})
+        Process.sleep(10)
+        feed(owner, ["Request timed out."])
+      end)
+    end
+
+    tcp = fn owner, _host, _opts -> spawn(fn -> feed(owner, ["reply time=5 ms"]) end) end
+
+    start_supervised!(
+      {SpikeMonitor,
+       key: :sticky,
+       host: "127.0.0.1",
+       count: 2,
+       window: 60,
+       persist: false,
+       tcp_ports: [1],
+       stream_fun: reply_then_silent,
+       tcp_stream_fun: tcp},
+      id: :sticky
+    )
+
+    # Well past @icmp_giveup worth of silent samples; the TCP stream's 5.0ms
+    # replies must never appear because we never switch.
+    Process.sleep(1200)
+    assert SpikeMonitor.stats(:sticky).mode == :icmp
+    refute SpikeMonitor.stats(:sticky).rtt_ms == 5.0
+  end
+
+  test "broadcast stats carry the probe mode (so the UI can tell ICMP from TCP)" do
+    Process.sleep(120)
+    assert SpikeMonitor.stats(:test).mode == :icmp
   end
 
   describe "loggable_events/2 — TCP-mode loss suppression" do
     test "TCP mode drops loss events but keeps latency spikes" do
       events = [%{kind: :latency, peak_ms: 120.0}, %{kind: :loss, loss_pct: 10.0}]
+
       assert SpikeMonitor.loggable_events(%{probe_mode: :tcp}, events) == [
                %{kind: :latency, peak_ms: 120.0}
              ]

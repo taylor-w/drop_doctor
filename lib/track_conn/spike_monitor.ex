@@ -38,6 +38,10 @@ defmodule TrackConn.SpikeMonitor do
   # (≈ every 2s at 5 samples/sec) — the cadence at which we detect a spike/loss
   # event and push updated stats to dashboards.
   @flush 10
+  # In TCP-fallback mode samples arrive at 1/s, so a 10-sample flush would freeze
+  # the Live card and delay detection ~10s. Flush every 2 there to keep the same
+  # ~2s cadence the ICMP path has.
+  @tcp_flush 2
   # Default per-packet spacing (Unix `-i`, seconds). Windows ignores it (~1s).
   @interval 0.2
   # Back off this long before restarting after the ping process exits, so a host
@@ -46,10 +50,9 @@ defmodule TrackConn.SpikeMonitor do
   # If the ping process dies sooner than this after starting, treat it as the OS
   # refusing our (sub-second) interval — see `maybe_raise_floor/2`.
   @fast_death_ms 1_500
-  # Latency-spike threshold for corroboration, mirroring `Stability`'s spike rule
-  # (> 2.5× the norm and ≥ 30ms over it) so the alt anchor is judged the same way.
-  @spike_ratio 2.5
-  @spike_floor_ms 30
+  # Corroboration judges the alt anchor with the *same* spike rule the detector
+  # uses (`Stability.spike?/2`) so detection and corroboration can never disagree
+  # about what counts as a spike — see `alt_verdict/2`.
   # TCP-fallback sampling is deliberately slow (1/s, not the ICMP 5/s): a TCP
   # connect is far heavier than an echo, so hammering a router with it is both
   # rude and self-defeating — the rare slow SYN it provokes looks like loss.
@@ -115,6 +118,17 @@ defmodule TrackConn.SpikeMonitor do
       # ICMP only. `probe_mode` flips to :tcp once we give up on ICMP.
       tcp_ports: Keyword.get(opts, :tcp_ports, []),
       probe_mode: :icmp,
+      # Has this host *ever* answered ICMP this session? Only hosts that never
+      # have are switched to the TCP sampler — so a transient outage on a normally
+      # ICMP-answering anchor can't permanently downgrade it to coarse TCP.
+      icmp_seen: false,
+      # The most recent numeric window median. Used as the detection baseline when
+      # the live window has gone fully silent during a sustained outage, so ongoing
+      # loss/spikes are still recorded instead of vanishing with "normal".
+      last_baseline: nil,
+      # True while a corroboration probe is in flight, so we never spawn a second
+      # (no pile-up under sustained spikes); events seen meanwhile record as `nil`.
+      corroborating: false,
       interval: Keyword.get(opts, :interval, @interval),
       # Raised to 1.0 if the OS rejects sub-second pings (macOS/some hardened
       # Linux for non-root); the effective interval is max(interval, floor).
@@ -216,6 +230,10 @@ defmodule TrackConn.SpikeMonitor do
     end
   end
 
+  # A corroboration task finished (or crashed — the task's `after` always fires):
+  # free the slot so the next flush's internet events can be corroborated again.
+  def handle_info(:corroboration_done, state), do: {:noreply, %{state | corroborating: false}}
+
   def handle_info(_msg, state), do: {:noreply, state}
 
   # --- internals ----------------------------------------------------------
@@ -245,14 +263,26 @@ defmodule TrackConn.SpikeMonitor do
   defp ingest(state, :ignore), do: state
 
   defp ingest(state, sample) do
+    state = mark_icmp_seen(state, sample)
     pending = [sample | state.pending]
 
-    if length(pending) >= state.flush do
+    if length(pending) >= flush_threshold(state) do
       flush(%{state | pending: pending})
     else
       %{state | pending: pending}
     end
   end
+
+  # Record the first real ICMP reply; once set it never clears, so a host that has
+  # proven it answers ICMP is never given up on in favour of TCP (see
+  # `maybe_switch_to_tcp/1`). Only meaningful in ICMP mode.
+  defp mark_icmp_seen(%{icmp_seen: false, probe_mode: :icmp} = state, {:ok, _}),
+    do: %{state | icmp_seen: true}
+
+  defp mark_icmp_seen(state, _sample), do: state
+
+  defp flush_threshold(%{probe_mode: :tcp}), do: @tcp_flush
+  defp flush_threshold(state), do: state.flush
 
   # Fold one batch of fresh samples into the window: detect spike/loss events
   # against the *prior* window's median (what "normal" was before this batch),
@@ -262,14 +292,33 @@ defmodule TrackConn.SpikeMonitor do
     times = for {:ok, ms} <- batch, do: ms
     result = %{times: times, sent: length(batch), received: length(times)}
 
-    baseline = Aggregate.median(for {:ok, ms} <- state.samples, do: ms)
-    log_events(state, loggable_events(state, Stability.burst_events(baseline, result)), baseline)
+    # Detect against the most recent *known* normal: the current window's median,
+    # or — when the window has gone fully silent in a sustained outage — the last
+    # numeric baseline we saw, so ongoing loss/spikes are still recorded instead
+    # of disappearing the moment "normal" ages out of the window.
+    window_baseline = Aggregate.median(for {:ok, ms} <- state.samples, do: ms)
+    baseline = window_baseline || state.last_baseline
+
+    state =
+      log_events(
+        state,
+        loggable_events(state, Stability.burst_events(baseline, result)),
+        baseline
+      )
+
+    last_baseline = if is_number(window_baseline), do: window_baseline, else: state.last_baseline
 
     samples = Enum.take(state.samples ++ batch, -state.window)
-    stats = Stability.summarize(samples)
+    stats = Map.put(Stability.summarize(samples), :mode, state.probe_mode)
     Phoenix.PubSub.broadcast(TrackConn.PubSub, @topic, {:stability, state.key, stats})
 
-    maybe_switch_to_tcp(%{state | pending: [], samples: samples, stats: stats})
+    maybe_switch_to_tcp(%{
+      state
+      | pending: [],
+        samples: samples,
+        stats: stats,
+        last_baseline: last_baseline
+    })
   end
 
   # How many consecutive ICMP-silent samples before we conclude the host drops
@@ -279,7 +328,11 @@ defmodule TrackConn.SpikeMonitor do
   # If the host has answered no ICMP at all after a warm-up and we have TCP ports
   # to try, swap the ping stream for a TCP-connect stream so a ping-silent router
   # still yields live latency/jitter instead of a permanent "no reply".
-  defp maybe_switch_to_tcp(%{probe_mode: :icmp, tcp_ports: [_ | _]} = state) do
+  # Only a host that has *never* answered ICMP this session is switched to TCP —
+  # the `icmp_seen: false` head guarantees a normally-answering anchor that hits a
+  # transient outage keeps trying ICMP (and recovers when it returns) instead of
+  # being permanently downgraded to coarse 1/s TCP connect-time sampling.
+  defp maybe_switch_to_tcp(%{probe_mode: :icmp, tcp_ports: [_ | _], icmp_seen: false} = state) do
     if length(state.samples) >= @icmp_giveup and icmp_silent?(state.samples) do
       Logger.info("spike monitor (#{state.key}): #{state.host} drops ICMP — sampling over TCP")
 
@@ -290,7 +343,8 @@ defmodule TrackConn.SpikeMonitor do
         probe_mode: :tcp,
         samples: [],
         pending: [],
-        stats: Stability.empty()
+        last_baseline: nil,
+        stats: Map.put(Stability.empty(), :mode, :tcp)
       })
       |> start_stream()
     else
@@ -315,28 +369,41 @@ defmodule TrackConn.SpikeMonitor do
 
   def loggable_events(_state, events), do: events
 
-  defp log_events(%{persist: false}, _events, _baseline), do: :ok
-  defp log_events(_state, [], _baseline), do: :ok
+  defp log_events(%{persist: false} = state, _events, _baseline), do: state
+  defp log_events(state, [], _baseline), do: state
 
-  # Internet events get corroborated against the alternate anchor before they're
-  # recorded. The probe (and the DB writes) run off the GenServer so sampling is
-  # never blocked; one probe per flush covers all of that flush's events.
-  defp log_events(%{key: :internet, alt_host: alt} = state, events, baseline)
+  # Internet events are corroborated against the alternate anchor before they're
+  # recorded. The probe (≈3s) and the DB writes run in a *supervised* task off the
+  # GenServer so sampling is never blocked and a crash is visible/cleaned up. Only
+  # one corroboration runs at a time (`corroborating: false` head): while one is in
+  # flight, later events record immediately with `nil` rather than spawning a
+  # second probe — so the tasks can't pile up under a sustained disturbance and no
+  # event is ever dropped.
+  defp log_events(
+         %{key: :internet, alt_host: alt, corroborating: false} = state,
+         events,
+         baseline
+       )
        when is_binary(alt) do
+    parent = self()
     base = event_base(state)
 
-    spawn(fn ->
-      corroborated = corroborate(alt, baseline)
-      Enum.each(events, &record_event(&1, base, corroborated))
+    Task.Supervisor.start_child(TrackConn.ProbeSupervisor, fn ->
+      try do
+        corroborated = corroborate(alt, baseline)
+        Enum.each(events, &record_event(&1, base, corroborated))
+      after
+        send(parent, :corroboration_done)
+      end
     end)
 
-    :ok
+    %{state | corroborating: true}
   end
 
   defp log_events(state, events, _baseline) do
     base = event_base(state)
     Enum.each(events, &record_event(&1, base, nil))
-    :ok
+    state
   end
 
   defp event_base(state),
@@ -361,12 +428,13 @@ defmodule TrackConn.SpikeMonitor do
     * `nil`   — it didn't answer at all → can't corroborate either way
   """
   def alt_verdict(res, baseline) do
-    floor = max(baseline || 0, @spike_floor_ms) * @spike_ratio
-
     cond do
-      not is_number(res[:rtt_ms]) -> nil
+      # Loss first: a total-loss result has `rtt_ms: nil`, so checking reachability
+      # before loss (the old order) made this branch dead and mislabelled a genuine
+      # both-providers-down outage as "couldn't corroborate".
       is_number(res[:loss_pct]) and res[:loss_pct] > 0 -> true
-      is_number(res[:max_rtt_ms]) and res[:max_rtt_ms] > floor -> true
+      not is_number(res[:rtt_ms]) -> nil
+      Stability.spike?(res[:max_rtt_ms], baseline) -> true
       true -> false
     end
   end
