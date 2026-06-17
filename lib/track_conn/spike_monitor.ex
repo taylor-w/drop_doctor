@@ -388,16 +388,27 @@ defmodule TrackConn.SpikeMonitor do
     parent = self()
     base = event_base(state)
 
-    Task.Supervisor.start_child(TrackConn.ProbeSupervisor, fn ->
-      try do
-        corroborated = corroborate(alt, baseline)
-        Enum.each(events, &record_event(&1, base, corroborated))
-      after
-        send(parent, :corroboration_done)
-      end
-    end)
+    spawned =
+      Task.Supervisor.start_child(TrackConn.ProbeSupervisor, fn ->
+        try do
+          corroborated = corroborate(alt, baseline)
+          Enum.each(events, &record_event(&1, base, corroborated))
+        after
+          send(parent, :corroboration_done)
+        end
+      end)
 
-    %{state | corroborating: true}
+    case spawned do
+      {:ok, _pid} ->
+        %{state | corroborating: true}
+
+      # Couldn't start the probe (supervisor down/restarting). Don't set the flag
+      # — otherwise it would latch forever with no :corroboration_done to clear it
+      # — and record this flush's events now so none are dropped.
+      _ ->
+        Enum.each(events, &record_event(&1, base, nil))
+        state
+    end
   end
 
   defp log_events(state, events, _baseline) do
