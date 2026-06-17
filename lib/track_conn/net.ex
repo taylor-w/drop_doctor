@@ -91,10 +91,12 @@ defmodule TrackConn.Net do
   # to the Windows host — no thundering herd of concurrent PowerShell probes (and
   # no repeated persistent_term writes) if a render races the cache TTL expiring.
   defp cached_windows_host_gateway do
-    now = System.monotonic_time(:millisecond)
-
+    # Return the last-known value regardless of TTL: this is only the UI hint, and
+    # honouring expiry here would make the "router unresolved" hint flash for the
+    # few seconds between a TTL lapse and the next sweep's re-discovery. Refresh is
+    # the discovering windows_host_gateway/0's job (boot + Monitor sweep).
     case :persistent_term.get(@win_gateway_cache, nil) do
-      {gw, expires_at} when expires_at > now -> gw
+      {gw, _expires_at} -> gw
       _ -> nil
     end
   rescue
