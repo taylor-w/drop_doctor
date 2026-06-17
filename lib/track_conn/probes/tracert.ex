@@ -19,7 +19,10 @@ defmodule TrackConn.Probes.Tracert do
   Windows the same way.
   """
 
-  @default_max_hops 30
+  # A reachable target stops the trace at the destination (~10–20 hops), so this
+  # cap only bounds the *unreachable*/black-holed case; 20 keeps that worst case
+  # (max_hops × 3 probes × per-probe wait) tolerable instead of ~90s.
+  @default_max_hops 20
   # Per-probe reply wait. Bounds how long a dead hop costs (3 × this) and the
   # whole trace's worst case.
   @probe_timeout_ms 1_000
@@ -98,7 +101,10 @@ defmodule TrackConn.Probes.Tracert do
   defp build_hop(count, rest) do
     {rtts, host_str} = split_probes(rest, [])
     present = Enum.reject(rtts, &is_nil/1)
-    sent = max(length(rtts), 1)
+    # tracert always sends exactly 3 probes per hop, so the denominator is fixed —
+    # deriving it from how many columns parsed would inflate loss if a column
+    # failed to split.
+    sent = 3
 
     %{
       count: count,
@@ -142,14 +148,28 @@ defmodule TrackConn.Probes.Tracert do
   end
 
   # Prefer the reverse-DNS name ("name [ip]") so PathReport can map ISP domains;
-  # fall back to the bracketed or bare IP; "???" for a fully timed-out hop (so it
-  # reads as a non-responder, exactly like mtr's unknown hops).
+  # fall back to the bracketed IP, then a bare IP (v4 or v6); "???" for a fully
+  # timed-out hop (so it reads as a non-responder, exactly like mtr's unknowns).
   defp extract_host(host_str) do
+    str = String.trim(host_str)
+
     cond do
-      m = Regex.run(~r/^(\S+)\s+\[[^\]]+\]/, host_str) -> Enum.at(m, 1)
-      m = Regex.run(~r/\[([^\]]+)\]/, host_str) -> Enum.at(m, 1)
-      m = Regex.run(~r/^(\d{1,3}(?:\.\d{1,3}){3})/, host_str) -> Enum.at(m, 1)
+      m = Regex.run(~r/^(\S+)\s+\[[^\]]+\]/, str) -> Enum.at(m, 1)
+      m = Regex.run(~r/^\[([^\]]+)\]/, str) -> Enum.at(m, 1)
+      ip = leading_ip(str) -> ip
       true -> "???"
+    end
+  end
+
+  # The first whitespace-delimited token, if it parses as an IP address (v4 or
+  # v6) — covers a bare IPv4 hop and an IPv6 hop, which `inet.parse_address`
+  # both accept but a v4-only regex would miss.
+  defp leading_ip(str) do
+    token = str |> String.split() |> List.first()
+
+    case token && token |> String.to_charlist() |> :inet.parse_address() do
+      {:ok, _} -> token
+      _ -> nil
     end
   end
 

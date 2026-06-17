@@ -56,6 +56,17 @@ defmodule TrackConn.Probes.TracertTest do
       assert h.sent == 3
     end
 
+    test "IPv6 hops keep their address instead of collapsing to ???" do
+      bare = "  1     1 ms     1 ms     1 ms  2606:4700:4700::1111\n"
+      [h] = Tracert.parse(bare, "2606:4700:4700::1111").hops
+      assert h.host == "2606:4700:4700::1111"
+      assert h.loss_pct == 0.0
+
+      named = "  2     9 ms     8 ms     9 ms  edge.isp.net [2001:db8::1]\n"
+      [h2] = Tracert.parse(named, "x").hops
+      assert h2.host == "edge.isp.net"
+    end
+
     test "non-English 'request timed out' text still parses (locale independence)" do
       out = "  7     *        *        *     Zeitüberschreitung der Anforderung.\n"
       [h] = Tracert.parse(out, "1.1.1.1").hops
