@@ -50,6 +50,10 @@ defmodule TrackConn.SpikeMonitor do
   # (> 2.5× the norm and ≥ 30ms over it) so the alt anchor is judged the same way.
   @spike_ratio 2.5
   @spike_floor_ms 30
+  # TCP-fallback sampling is deliberately slow (1/s, not the ICMP 5/s): a TCP
+  # connect is far heavier than an echo, so hammering a router with it is both
+  # rude and self-defeating — the rare slow SYN it provokes looks like loss.
+  @tcp_interval 1.0
 
   @doc "PubSub topic carrying `{:stability, key, stats}` updates."
   def topic, do: @topic
@@ -217,7 +221,7 @@ defmodule TrackConn.SpikeMonitor do
   # --- internals ----------------------------------------------------------
 
   defp start_stream(%{running: true, reader: nil} = state) do
-    interval = max(state.interval_floor, state.interval)
+    interval = stream_interval(state)
     # `ports` is only used by the TCP streamer; Ping.stream ignores it.
     reader = state.stream_fun.(self(), state.host, interval: interval, ports: state.tcp_ports)
     ref = Process.monitor(reader)
@@ -226,6 +230,9 @@ defmodule TrackConn.SpikeMonitor do
 
   # Paused, or a reader already running — leave it alone.
   defp start_stream(state), do: state
+
+  defp stream_interval(%{probe_mode: :tcp}), do: @tcp_interval
+  defp stream_interval(state), do: max(state.interval_floor, state.interval)
 
   defp stop_stream(%{reader: nil} = state), do: state
 
@@ -256,7 +263,7 @@ defmodule TrackConn.SpikeMonitor do
     result = %{times: times, sent: length(batch), received: length(times)}
 
     baseline = Aggregate.median(for {:ok, ms} <- state.samples, do: ms)
-    log_events(state, Stability.burst_events(baseline, result), baseline)
+    log_events(state, loggable_events(state, Stability.burst_events(baseline, result)), baseline)
 
     samples = Enum.take(state.samples ++ batch, -state.window)
     stats = Stability.summarize(samples)
@@ -294,6 +301,16 @@ defmodule TrackConn.SpikeMonitor do
   defp maybe_switch_to_tcp(state), do: state
 
   defp icmp_silent?(samples), do: not Enum.any?(samples, &match?({:ok, _}, &1))
+
+  # In TCP-fallback mode a "loss" is a connect that didn't finish the handshake
+  # in time — a retransmit-and-recover blip, not packet loss the user would feel.
+  # Logging it as a loss burst is noise (and alarming in an ISP report), so drop
+  # loss events here; genuine TCP-unreachability is caught by the 5s sweep. Real
+  # latency spikes still log.
+  defp loggable_events(%{probe_mode: :tcp}, events),
+    do: Enum.reject(events, &(&1.kind == :loss))
+
+  defp loggable_events(_state, events), do: events
 
   defp log_events(%{persist: false}, _events, _baseline), do: :ok
   defp log_events(_state, [], _baseline), do: :ok
