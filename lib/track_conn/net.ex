@@ -81,9 +81,24 @@ defmodule TrackConn.Net do
   uses this to surface a (now rare) manual-setup hint.
   """
   def wsl_router_unresolved? do
-    wsl?() and is_nil(System.get_env("ROUTER_IP")) and is_nil(windows_host_gateway())
+    wsl?() and is_nil(System.get_env("ROUTER_IP")) and is_nil(cached_windows_host_gateway())
   rescue
     _ -> false
+  end
+
+  # Read-only cache peek for the UI hint: never triggers discovery, so the single,
+  # serialized boot/Monitor-sweep path stays the *only* thing that ever shells out
+  # to the Windows host — no thundering herd of concurrent PowerShell probes (and
+  # no repeated persistent_term writes) if a render races the cache TTL expiring.
+  defp cached_windows_host_gateway do
+    now = System.monotonic_time(:millisecond)
+
+    case :persistent_term.get(@win_gateway_cache, nil) do
+      {gw, expires_at} when expires_at > now -> gw
+      _ -> nil
+    end
+  rescue
+    _ -> nil
   end
 
   # Hard cap on the Windows-host lookup. Discovery shells out over WSL interop and
@@ -272,4 +287,29 @@ defmodule TrackConn.Net do
   end
 
   defp valid_ip?(str), do: match?({:ok, _}, str |> to_charlist() |> :inet.parse_address())
+
+  @doc """
+  Times a TCP handshake to `host` on the first of `ports` that completes within
+  `timeout` ms, returning `{:ok, connect_ms, port}` (real traffic flows) or
+  `:error`. The single home of the connect-and-time logic shared by the
+  reachability probe (`TrackConn.Probes.Reach`) and the continuous TCP sampler
+  (`TrackConn.Probes.TcpStream`) so the socket contract can't drift between them.
+  The socket is always closed; a per-port failure falls through to the next port.
+  """
+  def tcp_connect(host, ports, timeout) do
+    charlist = String.to_charlist(host)
+
+    Enum.find_value(ports, :error, fn port ->
+      t0 = System.monotonic_time(:millisecond)
+
+      case :gen_tcp.connect(charlist, port, [:binary, active: false], timeout) do
+        {:ok, sock} ->
+          :gen_tcp.close(sock)
+          {:ok, System.monotonic_time(:millisecond) - t0, port}
+
+        {:error, _} ->
+          nil
+      end
+    end)
+  end
 end

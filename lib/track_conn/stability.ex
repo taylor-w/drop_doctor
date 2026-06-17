@@ -91,9 +91,19 @@ defmodule TrackConn.Stability do
     latency ++ loss
   end
 
-  defp spiking?(times, baseline) do
-    Enum.any?(times, fn r -> r > baseline * @spike_ratio and r - baseline >= @spike_floor_ms end)
-  end
+  @doc """
+  The single shared spike rule: `value` is a spike relative to `baseline` when it
+  is more than 2.5× the baseline AND at least 30ms above it. Used by burst
+  detection, the window spike count, and the cross-anchor corroboration check
+  (`TrackConn.SpikeMonitor.alt_verdict/2`) so all three agree on what a spike is.
+  Returns false unless both arguments are numbers.
+  """
+  def spike?(value, baseline) when is_number(value) and is_number(baseline),
+    do: value > baseline * @spike_ratio and value - baseline >= @spike_floor_ms
+
+  def spike?(_value, _baseline), do: false
+
+  defp spiking?(times, baseline), do: Enum.any?(times, &spike?(&1, baseline))
 
   @doc """
   Jitter as IPDV: the mean absolute difference between consecutive round-trips.
@@ -116,7 +126,7 @@ defmodule TrackConn.Stability do
 
   def spike_count(rtts) do
     m = Aggregate.median(rtts)
-    Enum.count(rtts, fn r -> r > m * @spike_ratio and r - m >= @spike_floor_ms end)
+    Enum.count(rtts, &spike?(&1, m))
   end
 
   @doc "Nearest-rank percentile (0–100). `nil` for an empty list."

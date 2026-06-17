@@ -24,8 +24,17 @@ defmodule TrackConn.Probes.TcpStream do
   def stream(owner, host, opts \\ []) do
     interval_ms = round(Keyword.get(opts, :interval, 1.0) * 1000)
     ports = Keyword.get(opts, :ports, [443])
-    connect = Keyword.get(opts, :connect, &tcp_connect/2)
+    connect = Keyword.get(opts, :connect, &default_connect/2)
     spawn(fn -> loop(owner, host, ports, interval_ms, connect) end)
+  end
+
+  # The sampler only needs the connect time, so collapse the shared helper's
+  # `{:ok, ms, port}` to `{:ok, ms}`; the injectable `:connect` keeps that shape.
+  defp default_connect(host, ports) do
+    case TrackConn.Net.tcp_connect(host, ports, @connect_timeout) do
+      {:ok, ms, _port} -> {:ok, ms}
+      other -> other
+    end
   end
 
   defp loop(owner, host, ports, interval_ms, connect) do
@@ -40,23 +49,5 @@ defmodule TrackConn.Probes.TcpStream do
     loop(owner, host, ports, interval_ms, connect)
   rescue
     e -> send(owner, {:stream_down, self(), Exception.message(e)})
-  end
-
-  # First port to complete a handshake wins; its connect time is the sample.
-  defp tcp_connect(host, ports) do
-    charlist = String.to_charlist(host)
-
-    Enum.find_value(ports, :error, fn port ->
-      t0 = System.monotonic_time(:millisecond)
-
-      case :gen_tcp.connect(charlist, port, [:binary, active: false], @connect_timeout) do
-        {:ok, sock} ->
-          :gen_tcp.close(sock)
-          {:ok, System.monotonic_time(:millisecond) - t0}
-
-        {:error, _} ->
-          nil
-      end
-    end)
   end
 end

@@ -4,6 +4,21 @@ defmodule TrackConn.StabilityTest do
 
   defp oks(rtts), do: Enum.map(rtts, &{:ok, &1})
 
+  describe "spike?/2 — the single shared spike rule" do
+    test "true only when > 2.5x baseline AND >= 30ms above it" do
+      assert Stability.spike?(60.0, 20.0)
+      # 4x the norm but only 9ms over the 3ms baseline — fails the absolute floor
+      refute Stability.spike?(12.0, 3.0)
+      # 45ms over but under 2.5x the 40ms baseline — fails the ratio
+      refute Stability.spike?(85.0, 40.0)
+    end
+
+    test "non-numbers never spike" do
+      refute Stability.spike?(nil, 20.0)
+      refute Stability.spike?(100.0, nil)
+    end
+  end
+
   describe "summarize/1" do
     test "empty buffer is all-nil / zero, not a crash" do
       s = Stability.summarize([])

@@ -106,7 +106,7 @@ defmodule TrackConn.Probes.Reach do
 
   defp tcp_fallback(anchors, opts) do
     ports = opts[:tcp_ports] || @default_tcp_ports
-    connect = opts[:tcp] || fn host -> tcp_connect(host, ports) end
+    connect = opts[:tcp] || fn host -> TrackConn.Net.tcp_connect(host, ports, @tcp_timeout) end
 
     anchors
     |> Task.async_stream(fn a -> {a, connect.(a)} end,
@@ -162,24 +162,5 @@ defmodule TrackConn.Probes.Reach do
       raw: "#{label(opts)} — no target answered ICMP or TCP (tried: #{Enum.join(anchors, ", ")})",
       error: "no reply"
     }
-  end
-
-  # Try each port in turn; first completed handshake wins. Returns
-  # `{:ok, ms, port}` (real traffic flows) or `:error`.
-  defp tcp_connect(host, ports) do
-    charlist = String.to_charlist(host)
-
-    Enum.find_value(ports, :error, fn port ->
-      t0 = System.monotonic_time(:millisecond)
-
-      case :gen_tcp.connect(charlist, port, [:binary, active: false], @tcp_timeout) do
-        {:ok, sock} ->
-          :gen_tcp.close(sock)
-          {:ok, System.monotonic_time(:millisecond) - t0, port}
-
-        {:error, _} ->
-          nil
-      end
-    end)
   end
 end
