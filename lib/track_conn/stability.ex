@@ -23,19 +23,48 @@ defmodule TrackConn.Stability do
     rtts = for {:ok, ms} <- samples, do: ms
     sent = length(samples)
     received = length(rtts)
+    # Sort once and derive median / percentiles / max from the sorted list — this
+    # is the busiest resident path (every ~2s per host), and the previous shape
+    # sorted the window ~4× per call. Jitter stays on the *arrival* order.
+    sorted = Enum.sort(rtts)
+    med = median_sorted(sorted)
 
     %{
       sample_count: sent,
       received: received,
       loss_pct: if(sent > 0, do: (sent - received) * 100.0 / sent, else: 0.0),
-      rtt_ms: round1(Aggregate.median(rtts)),
+      rtt_ms: round1(med),
       jitter_ms: round1(jitter(rtts)),
-      max_rtt_ms: round1(max_of(rtts)),
-      p95_ms: round1(percentile(rtts, 95)),
-      p99_ms: round1(percentile(rtts, 99)),
-      spike_count: spike_count(rtts)
+      max_rtt_ms: round1(List.last(sorted)),
+      p95_ms: round1(percentile_sorted(sorted, 95)),
+      p99_ms: round1(percentile_sorted(sorted, 99)),
+      spike_count: count_spikes(rtts, med)
     }
   end
+
+  # Median of an already-sorted list — same rule as `TrackConn.Aggregate.median/1`
+  # (mean of the two middles on even length), without re-sorting.
+  defp median_sorted([]), do: nil
+
+  defp median_sorted(sorted) do
+    n = length(sorted)
+    mid = div(n, 2)
+
+    if rem(n, 2) == 1,
+      do: Enum.at(sorted, mid),
+      else: (Enum.at(sorted, mid - 1) + Enum.at(sorted, mid)) / 2
+  end
+
+  # Nearest-rank percentile of an already-sorted list (same rule as percentile/2).
+  defp percentile_sorted([], _p), do: nil
+
+  defp percentile_sorted(sorted, p) do
+    idx = min(length(sorted) - 1, round(p / 100 * (length(sorted) - 1)))
+    Enum.at(sorted, idx)
+  end
+
+  defp count_spikes(rtts, _med) when length(rtts) < 3, do: 0
+  defp count_spikes(rtts, med), do: Enum.count(rtts, &spike?(&1, med))
 
   @doc "Stats shape with no data yet."
   def empty do
@@ -137,9 +166,6 @@ defmodule TrackConn.Stability do
     idx = min(length(sorted) - 1, round(p / 100 * (length(sorted) - 1)))
     Enum.at(sorted, idx)
   end
-
-  defp max_of([]), do: nil
-  defp max_of(list), do: Enum.max(list)
 
   defp round1(nil), do: nil
   defp round1(n), do: Float.round(n / 1, 1)
