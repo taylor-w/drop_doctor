@@ -382,6 +382,10 @@ defmodule TrackConnWeb.DashboardLive do
                 <div>
                   <div class="text-xs font-semibold opacity-70 mb-1">{name}</div>
                   <%= case @stability[key] do %>
+                    <% %{sample_count: n, received: 0, mode: :tcp} when n > 0 -> %>
+                      <div class="text-xs opacity-50 leading-snug">
+                        no reply — this host isn't answering right now (see the verdict above)
+                      </div>
                     <% %{sample_count: n, received: 0} when n > 0 -> %>
                       <div class="text-xs opacity-50 leading-snug">
                         no ICMP reply here — real traffic is getting through (see the verdict above)
@@ -854,11 +858,25 @@ defmodule TrackConnWeb.DashboardLive do
     to = tl_at(List.last(rows))
 
     if from && to do
-      Measurements.spike_events_between(from, to) |> SpikeAnalysis.annotate()
+      # Pad the query by the co-occurrence window so a spike whose cross-segment
+      # twin sits just outside the visible range is still present when annotate/1
+      # classifies source — otherwise an edge event loses its partner and a local
+      # common-mode blip gets mislabelled "ISP". Render only the events actually
+      # inside [from, to].
+      pad = SpikeAnalysis.co_window_ms()
+      ctx_from = DateTime.add(from, -pad, :millisecond)
+      ctx_to = DateTime.add(to, pad, :millisecond)
+
+      Measurements.spike_events_between(ctx_from, ctx_to)
+      |> SpikeAnalysis.annotate()
+      |> Enum.filter(&in_window?(&1, from, to))
     else
       []
     end
   end
+
+  defp in_window?(%{occurred_at: at}, from, to),
+    do: DateTime.compare(at, from) != :lt and DateTime.compare(at, to) != :gt
 
   # On each new sweep while the timeline is open: the live edge (offset 0) tracks
   # now; a panned-into-the-past view shifts one step older so it stays anchored to

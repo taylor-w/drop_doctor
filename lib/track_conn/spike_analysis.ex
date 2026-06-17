@@ -42,6 +42,9 @@ defmodule TrackConn.SpikeAnalysis do
   # freezing both probes, not real network latency.
   @artifact_ms 1_000
 
+  @doc "The default cross-segment co-occurrence window (ms) used by `annotate/2`."
+  def co_window_ms, do: @window_ms
+
   @doc """
   Annotates each event with `:source`, `:co_occurring?` and `:artifact?`.
 
