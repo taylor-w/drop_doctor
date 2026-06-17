@@ -112,10 +112,18 @@ defmodule TrackConnWeb.Layouts do
       <button type="button" data-privacy-set="off" title="Show all values">
         <.icon name="hero-eye-micro" class="size-4" />
       </button>
-      <button type="button" data-privacy-set="blur" title="Stream-safe: blur IPs, hostnames & times (hover to peek)">
+      <button
+        type="button"
+        data-privacy-set="blur"
+        title="Stream-safe: blur IPs, hostnames & times (hover to peek)"
+      >
         <.icon name="hero-eye-slash-micro" class="size-4" />
       </button>
-      <button type="button" data-privacy-set="strict" title="Strict: redact IPs, hostnames & times (no peek)">
+      <button
+        type="button"
+        data-privacy-set="strict"
+        title="Strict: redact IPs, hostnames & times (no peek)"
+      >
         <.icon name="hero-lock-closed-micro" class="size-4" />
       </button>
     </div>

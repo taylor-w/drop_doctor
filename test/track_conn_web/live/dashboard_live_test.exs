@@ -40,7 +40,13 @@ defmodule TrackConnWeb.DashboardLiveTest do
   describe "expandable timeline (router vs. ISP)" do
     test "renders both series and the ISP differential band", %{conn: conn} do
       seed_sweep(%{internet_rtt_ms: 14.0, router_rtt_ms: 3.0})
-      seed_sweep(%{internet_rtt_ms: 120.0, router_rtt_ms: 4.0, status: "degraded", culprit: "isp"})
+
+      seed_sweep(%{
+        internet_rtt_ms: 120.0,
+        router_rtt_ms: 4.0,
+        status: "degraded",
+        culprit: "isp"
+      })
 
       {:ok, view, _html} = live(conn, "/")
       html = render_click(view, "open_timeline")

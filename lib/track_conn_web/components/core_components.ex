@@ -72,8 +72,16 @@ defmodule TrackConnWeb.CoreComponents do
         @kind == :info && "tc-toast-info",
         @kind == :error && "tc-toast-error"
       ]}>
-        <.icon :if={@kind == :info} name="hero-information-circle" class="tc-toast-icon size-5 shrink-0" />
-        <.icon :if={@kind == :error} name="hero-exclamation-circle" class="tc-toast-icon size-5 shrink-0" />
+        <.icon
+          :if={@kind == :info}
+          name="hero-information-circle"
+          class="tc-toast-icon size-5 shrink-0"
+        />
+        <.icon
+          :if={@kind == :error}
+          name="hero-exclamation-circle"
+          class="tc-toast-icon size-5 shrink-0"
+        />
         <div>
           <p :if={@title} class="font-semibold">{@title}</p>
           <p>{msg}</p>

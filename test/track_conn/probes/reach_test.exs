@@ -10,12 +10,30 @@ defmodule TrackConn.Probes.ReachTest do
     fn host, _opts ->
       case Map.get(scripted, host) do
         {rtt, loss} ->
-          %{ok?: true, rtt_ms: rtt, max_rtt_ms: rtt, jitter_ms: 1.0, loss_pct: loss,
-            sent: 3, received: 3, raw: "reply from #{host}", error: nil}
+          %{
+            ok?: true,
+            rtt_ms: rtt,
+            max_rtt_ms: rtt,
+            jitter_ms: 1.0,
+            loss_pct: loss,
+            sent: 3,
+            received: 3,
+            raw: "reply from #{host}",
+            error: nil
+          }
 
         nil ->
-          %{ok?: false, rtt_ms: nil, max_rtt_ms: nil, jitter_ms: nil, loss_pct: 100.0,
-            sent: 3, received: 0, raw: "no reply from #{host}", error: "no reply"}
+          %{
+            ok?: false,
+            rtt_ms: nil,
+            max_rtt_ms: nil,
+            jitter_ms: nil,
+            loss_pct: 100.0,
+            sent: 3,
+            received: 0,
+            raw: "no reply from #{host}",
+            error: "no reply"
+          }
       end
     end
   end
