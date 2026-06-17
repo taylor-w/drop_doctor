@@ -20,8 +20,12 @@ defmodule TrackConn.Targets do
       %{
         key: :router,
         label: "Your router / local network",
-        kind: :ping,
+        kind: :reach,
         target: router_target(),
+        # Many routers never answer ICMP echo but do accept TCP (DNS :53, web
+        # admin :80/:443) — so fall back to a TCP connect rather than reporting
+        # the router unreachable.
+        probe_opts: [anchors: [router_target()], tcp_ports: [53, 80, 443], label: "your router"],
         about: "The first hop out of your computer. Problems here are on your side."
       },
       %{
@@ -29,6 +33,7 @@ defmodule TrackConn.Targets do
         label: "The open internet (via your ISP)",
         kind: :reach,
         target: internet_target(),
+        probe_opts: [anchors: internet_anchors(), tcp_ports: [443], label: "open internet"],
         about: "A raw IP address with no DNS involved. Problems here usually mean your ISP."
       },
       %{

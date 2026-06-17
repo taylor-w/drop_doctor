@@ -69,6 +69,30 @@ defmodule TrackConn.Probes.ReachTest do
     assert r.error == "no reply"
   end
 
+  test "router that blocks ICMP but answers TCP :53 -> reachable, names the port" do
+    # The common home-router case: ping times out, but a TCP connect to DNS/web
+    # admin completes, so we can still measure (and prove) it's reachable.
+    tcp = fn
+      "192.168.1.1" -> {:ok, 2, 53}
+      _ -> :error
+    end
+
+    r =
+      Reach.run("192.168.1.1",
+        anchors: ["192.168.1.1"],
+        tcp_ports: [53, 80, 443],
+        label: "your router",
+        ping: pinger(%{}),
+        tcp: tcp
+      )
+
+    assert r.ok?
+    assert r.rtt_ms == 2.0
+    assert r.loss_pct == 0.0
+    assert r.raw =~ "your router"
+    assert r.raw =~ "192.168.1.1:53"
+  end
+
   test "result is ping-shaped (keys the diagnosis/aggregate rely on)" do
     r = run(["1.1.1.1"], %{"1.1.1.1" => {10.0, 0.0}})
 

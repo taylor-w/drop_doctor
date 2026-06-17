@@ -59,9 +59,9 @@ defmodule TrackConn.Sweeper do
     end)
   end
 
-  defp probe(%{kind: kind, target: target}, registry) do
+  defp probe(%{kind: kind, target: target} = defn, registry) do
     mod = Map.fetch!(registry, kind)
-    mod.run(target, [])
+    mod.run(target, Map.get(defn, :probe_opts, []))
   end
 
   defp timeout_result(%{kind: kind}, msg) when kind in [:ping, :reach],

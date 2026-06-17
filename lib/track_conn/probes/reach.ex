@@ -1,61 +1,73 @@
 defmodule TrackConn.Probes.Reach do
   @moduledoc """
-  Open-internet reachability probe — the robust replacement for pinging a single
-  hardcoded IP.
+  Reachability probe with an ICMP→TCP fallback — the robust replacement for
+  pinging a single hardcoded IP. Used for both the open internet (several anchors)
+  and the local router (one target), each with its own candidate TCP ports.
 
   Two failure modes were faking outages on connections that were actually fine:
 
     1. **A filtered anchor.** Some networks (and WSL NAT setups) silently drop
        ICMP to one well-known resolver — e.g. 1.1.1.1 — while happily answering
-       another (8.8.8.8). Betting the whole ISP verdict on one IP turns that into
-       a false "internet down".
+       another (8.8.8.8). Betting the whole verdict on one IP turns that into a
+       false outage.
 
-    2. **ICMP filtered entirely.** A few paths block ICMP echo outright but pass
-       ordinary TCP — the traffic you actually use. Ping-only probing calls that
-       an outage too.
+    2. **ICMP filtered entirely.** Plenty of paths — and lots of home routers —
+       block ICMP echo outright but still pass ordinary TCP, the traffic you
+       actually use. Ping-only probing calls that an outage too. (A router that
+       answers DNS on :53 but never replies to `ping` is the common case.)
 
-  So this probe (a) fans ICMP out across *all* anchors and treats the internet as
-  reachable if **any** answers (picking the healthiest for the reading), and
-  (b) if every anchor is ICMP-silent, falls back to a **TCP connect** to one of
-  them — if that succeeds, real traffic is getting through, so it reports
-  reachable (with coarse, connect-time latency) rather than down.
+  So this probe (a) fans ICMP across *all* targets and is reachable if **any**
+  answers (picking the healthiest for the reading), and (b) if every target is
+  ICMP-silent, falls back to a **TCP connect** to the given ports — if one
+  completes, real traffic is getting through, so it reports reachable with
+  coarse connect-time latency rather than down.
 
-  Returns the same ping-shaped map every other ping consumer expects
-  (`:ok?`, `:rtt_ms`, `:loss_pct`, `:max_rtt_ms`, `:jitter_ms`, …) so the
-  diagnosis, smoothing, and UI need no special-casing — only the `:def.kind`
-  differs (`:reach`), which `TrackConn.Aggregate` smooths exactly like a ping.
+  Options (passed from the ladder def's `:probe_opts`):
+    * `:anchors`   — list of IPs to try (defaults to `[target]`)
+    * `:tcp_ports` — ports for the TCP fallback (defaults to `[443]`)
+    * `:label`     — human prefix for the raw line ("open internet" / "your router")
+
+  Returns the same ping-shaped map every ping consumer expects, so diagnosis,
+  smoothing and the UI need no special-casing — only `:def.kind` is `:reach`,
+  which `TrackConn.Aggregate` smooths exactly like a ping.
   """
 
   @behaviour TrackConn.Probe
 
-  alias TrackConn.{Probes.Ping, Targets}
+  alias TrackConn.Probes.Ping
 
-  # Per-anchor ICMP probe: a few packets, short per-packet wait so a blocked
-  # anchor resolves to "silent" quickly. Anchors are probed concurrently, so the
-  # ICMP phase costs about one anchor's time, not the sum.
+  # Per-target ICMP probe: a few packets, short per-packet wait so a blocked
+  # target resolves to "silent" quickly. Targets are probed concurrently, so the
+  # ICMP phase costs about one target's time, not the sum.
   @count 3
   @ping_timeout 1
   @icmp_stream_timeout 6_000
 
-  # TCP fallback: a plain connect to a port real traffic uses. 443 is open on the
-  # resolvers and, crucially, isn't ICMP — so it survives ICMP filters and NATs.
-  @tcp_port 443
+  # TCP fallback: a plain connect to a port real traffic uses — survives ICMP
+  # filters and NATs.
+  @default_tcp_ports [443]
   @tcp_timeout 1_500
 
   @impl true
   def run(target, opts \\ []) do
-    anchors = opts[:anchors] || Targets.internet_anchors()
-    anchors = if anchors == [], do: [target], else: anchors
+    anchors =
+      case opts[:anchors] do
+        nil -> [target]
+        [] -> [target]
+        list -> list
+      end
 
     case best_icmp(anchors, opts) do
-      {anchor, result} -> via_icmp(result, anchor, anchors)
+      {anchor, result} -> via_icmp(result, anchor, anchors, opts)
       nil -> tcp_fallback(anchors, opts)
     end
   end
 
+  defp label(opts), do: opts[:label] || "open internet"
+
   # --- ICMP phase ---------------------------------------------------------
 
-  # Ping every anchor concurrently; return the healthiest responder (lowest loss,
+  # Ping every target concurrently; return the healthiest responder (lowest loss,
   # then lowest latency) as `{anchor, ping_result}`, or nil if none answered.
   defp best_icmp(anchors, opts) do
     # A 2-arity fun `(host, opts) -> ping_result` so tests can inject a closure
@@ -80,36 +92,49 @@ defmodule TrackConn.Probes.Reach do
     end
   end
 
-  defp via_icmp(result, anchor, anchors) do
-    %{
-      result
-      | raw: "open internet via #{anchor} (any of #{length(anchors)} anchors)\n#{result.raw}"
-    }
+  defp via_icmp(result, anchor, anchors, opts) do
+    head =
+      case anchors do
+        [_] -> "#{label(opts)} #{anchor}"
+        _ -> "#{label(opts)} via #{anchor} (any of #{length(anchors)} anchors)"
+      end
+
+    %{result | raw: "#{head}\n#{result.raw}"}
   end
 
   # --- TCP fallback -------------------------------------------------------
 
   defp tcp_fallback(anchors, opts) do
-    connect = opts[:tcp] || (&tcp_connect/1)
+    ports = opts[:tcp_ports] || @default_tcp_ports
+    connect = opts[:tcp] || fn host -> tcp_connect(host, ports) end
 
     anchors
     |> Task.async_stream(fn a -> {a, connect.(a)} end,
       max_concurrency: max(length(anchors), 1),
-      timeout: @tcp_timeout + 500,
+      timeout: @tcp_timeout * length(ports) + 500,
       on_timeout: :kill_task,
       ordered: false
     )
     |> Enum.flat_map(fn
       {:ok, {anchor, {:ok, ms}}} -> [{anchor, ms}]
+      {:ok, {anchor, {:ok, ms, port}}} -> [{anchor, ms, port}]
       _ -> []
     end)
     |> case do
-      [] -> unreachable(anchors)
-      oks -> {anchor, ms} = Enum.min_by(oks, fn {_a, ms} -> ms end); reachable_tcp(anchor, ms, anchors)
+      [] -> unreachable(anchors, opts)
+      oks -> oks |> Enum.min_by(&elem(&1, 1)) |> reachable_tcp(anchors, opts)
     end
   end
 
-  defp reachable_tcp(anchor, ms, anchors) do
+  defp reachable_tcp(hit, anchors, opts) do
+    {anchor, ms, port} =
+      case hit do
+        {a, ms, port} -> {a, ms, port}
+        {a, ms} -> {a, ms, nil}
+      end
+
+    where = if port, do: "#{anchor}:#{port}", else: anchor
+
     %{
       ok?: true,
       rtt_ms: ms * 1.0,
@@ -119,13 +144,13 @@ defmodule TrackConn.Probes.Reach do
       sent: 1,
       received: 1,
       raw:
-        "ICMP blocked to every anchor — reached #{anchor}:#{@tcp_port} over TCP in #{ms}ms\n" <>
+        "#{label(opts)} — ICMP blocked, reached #{where} over TCP in #{ms}ms\n" <>
           "tried: #{Enum.join(anchors, ", ")}",
       error: nil
     }
   end
 
-  defp unreachable(anchors) do
+  defp unreachable(anchors, opts) do
     %{
       ok?: false,
       rtt_ms: nil,
@@ -134,23 +159,27 @@ defmodule TrackConn.Probes.Reach do
       loss_pct: 100.0,
       sent: length(anchors),
       received: 0,
-      raw: "no internet anchor responded to ICMP or TCP — tried: #{Enum.join(anchors, ", ")}",
+      raw: "#{label(opts)} — no target answered ICMP or TCP (tried: #{Enum.join(anchors, ", ")})",
       error: "no reply"
     }
   end
 
-  # Plain TCP connect timing. Returns {:ok, ms} on a completed handshake (real
-  # traffic flows), :error otherwise.
-  defp tcp_connect(host) do
-    t0 = System.monotonic_time(:millisecond)
+  # Try each port in turn; first completed handshake wins. Returns
+  # `{:ok, ms, port}` (real traffic flows) or `:error`.
+  defp tcp_connect(host, ports) do
+    charlist = String.to_charlist(host)
 
-    case :gen_tcp.connect(String.to_charlist(host), @tcp_port, [:binary, active: false], @tcp_timeout) do
-      {:ok, sock} ->
-        :gen_tcp.close(sock)
-        {:ok, System.monotonic_time(:millisecond) - t0}
+    Enum.find_value(ports, :error, fn port ->
+      t0 = System.monotonic_time(:millisecond)
 
-      {:error, _} ->
-        :error
-    end
+      case :gen_tcp.connect(charlist, port, [:binary, active: false], @tcp_timeout) do
+        {:ok, sock} ->
+          :gen_tcp.close(sock)
+          {:ok, System.monotonic_time(:millisecond) - t0, port}
+
+        {:error, _} ->
+          nil
+      end
+    end)
   end
 end
