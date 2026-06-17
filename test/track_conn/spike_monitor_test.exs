@@ -98,6 +98,42 @@ defmodule TrackConn.SpikeMonitorTest do
     end
   end
 
+  test "switches to TCP sampling when the host never answers ICMP" do
+    # The ICMP stream only ever times out; the TCP stream answers. After the
+    # ICMP give-up threshold the monitor should swap and start collecting samples.
+    icmp = fn owner, _host, _opts -> spawn(fn -> feed(owner, ["Request timed out."]) end) end
+    tcp = fn owner, _host, _opts -> spawn(fn -> feed(owner, ["reply time=5 ms"]) end) end
+
+    start_supervised!(
+      {SpikeMonitor,
+       key: :tcpswitch,
+       host: "127.0.0.1",
+       count: 5,
+       window: 500,
+       persist: false,
+       tcp_ports: [1],
+       stream_fun: icmp,
+       tcp_stream_fun: tcp},
+      id: :tcpswitch
+    )
+
+    # ICMP yields only loss (received stays 0); once it gives up and swaps to the
+    # TCP stream, real replies start landing.
+    assert eventually(fn -> SpikeMonitor.stats(:tcpswitch).received > 0 end)
+    assert SpikeMonitor.stats(:tcpswitch).rtt_ms == 5.0
+  end
+
+  defp eventually(fun, tries \\ 60) do
+    Enum.reduce_while(1..tries, false, fn _, _ ->
+      if fun.() do
+        {:halt, true}
+      else
+        Process.sleep(50)
+        {:cont, false}
+      end
+    end)
+  end
+
   test "timeout lines in the stream surface as packet loss" do
     timeout = "Request timed out."
 

@@ -28,7 +28,7 @@ defmodule TrackConn.SpikeMonitor do
   use GenServer
   require Logger
 
-  alias TrackConn.{Aggregate, Measurements, Probes.Ping, Stability}
+  alias TrackConn.{Aggregate, Measurements, Probes.Ping, Probes.TcpStream, Stability}
 
   @topic "stability"
   # Keep ~the last minute of samples (≈5/s × 60s). Bounds memory and defines the
@@ -106,6 +106,11 @@ defmodule TrackConn.SpikeMonitor do
       alt_host: nil,
       # Reachability check used to pick a live anchor; injectable for tests.
       reach_fun: Keyword.get(opts, :reach_fun, &reachable?/1),
+      # TCP ports to fall back to when the host never answers ICMP (e.g. a
+      # router that drops ping but accepts DNS/web-admin connections). Empty =
+      # ICMP only. `probe_mode` flips to :tcp once we give up on ICMP.
+      tcp_ports: Keyword.get(opts, :tcp_ports, []),
+      probe_mode: :icmp,
       interval: Keyword.get(opts, :interval, @interval),
       # Raised to 1.0 if the OS rejects sub-second pings (macOS/some hardened
       # Linux for non-root); the effective interval is max(interval, floor).
@@ -114,6 +119,8 @@ defmodule TrackConn.SpikeMonitor do
       flush: Keyword.get(opts, :count, @flush),
       # Injectable so the sampling loop can be unit-tested without real pings.
       stream_fun: Keyword.get(opts, :stream_fun, &Ping.stream/3),
+      # The streamer to swap in once we give up on ICMP; injectable for tests.
+      tcp_stream_fun: Keyword.get(opts, :tcp_stream_fun, &TcpStream.stream/3),
       # Persist detected spike/loss events (off in tests, which have no DB sandbox).
       persist: Keyword.get(opts, :persist, true),
       running: true,
@@ -211,7 +218,8 @@ defmodule TrackConn.SpikeMonitor do
 
   defp start_stream(%{running: true, reader: nil} = state) do
     interval = max(state.interval_floor, state.interval)
-    reader = state.stream_fun.(self(), state.host, interval: interval)
+    # `ports` is only used by the TCP streamer; Ping.stream ignores it.
+    reader = state.stream_fun.(self(), state.host, interval: interval, ports: state.tcp_ports)
     ref = Process.monitor(reader)
     %{state | reader: reader, reader_ref: ref, reader_started_ms: now_ms()}
   end
@@ -254,8 +262,38 @@ defmodule TrackConn.SpikeMonitor do
     stats = Stability.summarize(samples)
     Phoenix.PubSub.broadcast(TrackConn.PubSub, @topic, {:stability, state.key, stats})
 
-    %{state | pending: [], samples: samples, stats: stats}
+    maybe_switch_to_tcp(%{state | pending: [], samples: samples, stats: stats})
   end
+
+  # How many consecutive ICMP-silent samples before we conclude the host drops
+  # ping and switch the resident sampler to TCP connects (~6s at 5 samples/sec).
+  @icmp_giveup 30
+
+  # If the host has answered no ICMP at all after a warm-up and we have TCP ports
+  # to try, swap the ping stream for a TCP-connect stream so a ping-silent router
+  # still yields live latency/jitter instead of a permanent "no reply".
+  defp maybe_switch_to_tcp(%{probe_mode: :icmp, tcp_ports: [_ | _]} = state) do
+    if length(state.samples) >= @icmp_giveup and icmp_silent?(state.samples) do
+      Logger.info("spike monitor (#{state.key}): #{state.host} drops ICMP — sampling over TCP")
+
+      state
+      |> stop_stream()
+      |> Map.merge(%{
+        stream_fun: state.tcp_stream_fun,
+        probe_mode: :tcp,
+        samples: [],
+        pending: [],
+        stats: Stability.empty()
+      })
+      |> start_stream()
+    else
+      state
+    end
+  end
+
+  defp maybe_switch_to_tcp(state), do: state
+
+  defp icmp_silent?(samples), do: not Enum.any?(samples, &match?({:ok, _}, &1))
 
   defp log_events(%{persist: false}, _events, _baseline), do: :ok
   defp log_events(_state, [], _baseline), do: :ok
