@@ -238,6 +238,27 @@ defmodule TrackConn.ReportTest do
       assert List.last(lines) =~ ",isp,false"
     end
 
+    test "CSV neutralizes spreadsheet formula-injection prefixes in text cells" do
+      evil = %TrackConn.Measurements.SpikeEvent{
+        occurred_at: ~U[2026-06-05 12:59:40Z],
+        segment: "internet",
+        host: "=2+2",
+        kind: "latency",
+        peak_ms: 180.0,
+        baseline_ms: 14.0,
+        loss_pct: nil,
+        samples: 10
+      }
+
+      csv =
+        Report.build(now: @now, verdict: verdict(), deep: nil, sweeps: [], spike_events: [evil])
+        |> Report.spikes_csv()
+
+      # prefixed with ' so a spreadsheet treats =2+2 as literal text, not a formula
+      assert csv =~ ",'=2+2,"
+      refute csv =~ ",=2+2,"
+    end
+
     test "empty spike log still yields a valid header-only CSV" do
       csv =
         Report.build(now: @now, verdict: verdict(), deep: nil, sweeps: [], spike_events: [])

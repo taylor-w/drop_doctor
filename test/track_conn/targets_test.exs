@@ -53,6 +53,35 @@ defmodule TrackConn.TargetsTest do
     end
   end
 
+  describe "target validation (no CLI-flag injection into the probes)" do
+    test "a flag-like ROUTER_IP is rejected and falls back to config" do
+      put_env("ROUTER_IP", "-O/tmp/pwn")
+      Application.put_env(:track_conn, :targets, %{router: "10.0.0.1"})
+      assert Targets.router_target() == "10.0.0.1"
+    end
+
+    test "a flag-like INTERNET_IP is rejected and falls back to defaults" do
+      put_env("INTERNET_IP", "--report")
+      Application.put_env(:track_conn, :targets, %{})
+      anchors = Targets.internet_anchors()
+      refute "--report" in anchors
+      assert "1.1.1.1" in anchors
+    end
+
+    test "an injected config anchor is dropped, valid ones kept" do
+      Application.put_env(:track_conn, :targets, %{internet_anchors: ["-x", "9.9.9.9"]})
+      assert Targets.internet_anchors() == ["9.9.9.9"]
+    end
+
+    test "hostnames and IPv6 are accepted" do
+      Application.put_env(:track_conn, :targets, %{dns: "cloudflare.com"})
+      assert Targets.dns_target() == "cloudflare.com"
+
+      Application.put_env(:track_conn, :targets, %{internet: "2606:4700:4700::1111"})
+      assert Targets.internet_anchors() == ["2606:4700:4700::1111"]
+    end
+  end
+
   defp put_env(key, nil), do: System.delete_env(key)
   defp put_env(key, val), do: System.put_env(key, val)
 end

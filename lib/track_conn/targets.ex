@@ -56,8 +56,8 @@ defmodule TrackConn.Targets do
 
   @doc "The router/gateway IP we'll probe, honoring ROUTER_IP then auto-detection."
   def router_target do
-    blank_to_nil(System.get_env("ROUTER_IP")) ||
-      get_in(config(), [:router]) ||
+    safe_host(blank_to_nil(System.get_env("ROUTER_IP"))) ||
+      safe_host(get_in(config(), [:router])) ||
       TrackConn.Net.default_gateway() ||
       "192.168.1.1"
   end
@@ -77,11 +77,19 @@ defmodule TrackConn.Targets do
   """
   def internet_anchors do
     cond do
-      ip = blank_to_nil(System.get_env("INTERNET_IP")) -> [ip]
-      (list = get_in(config(), [:internet_anchors])) not in [nil, []] -> list
-      single = get_in(config(), [:internet]) -> [single]
+      ip = safe_host(blank_to_nil(System.get_env("INTERNET_IP"))) -> [ip]
+      (list = config_anchors()) != [] -> list
+      single = safe_host(get_in(config(), [:internet])) -> [single]
       true -> @default_internet_anchors
     end
+  end
+
+  # Config anchors, dropping any that aren't a valid host (so one bad entry can't
+  # poison the set or inject a CLI flag into the probes).
+  defp config_anchors do
+    (get_in(config(), [:internet_anchors]) || [])
+    |> List.wrap()
+    |> Enum.flat_map(fn a -> List.wrap(safe_host(a)) end)
   end
 
   # An env var set to "" is effectively unset; treat it as nil so it falls through
@@ -91,10 +99,27 @@ defmodule TrackConn.Targets do
   defp blank_to_nil(""), do: nil
   defp blank_to_nil(str), do: str
 
+  # A target we hand to a system command (ping/mtr/tracert) must be a literal IP
+  # or a DNS hostname — never a string a tool could read as a CLI flag. Reject
+  # anything else (notably a leading "-"), so a stray env/config value can't
+  # inject arguments into the probes; callers fall back to the next source. The
+  # auto-detected gateway is already IP-validated in `TrackConn.Net`.
+  defp safe_host(nil), do: nil
+
+  defp safe_host(host) when is_binary(host) do
+    cond do
+      match?({:ok, _}, host |> String.to_charlist() |> :inet.parse_address()) -> host
+      Regex.match?(~r/^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$/, host) -> host
+      true -> nil
+    end
+  end
+
+  defp safe_host(_), do: nil
+
   @doc "The primary internet anchor — for display and the continuous sampler."
   def internet_target, do: hd(internet_anchors())
 
-  def dns_target, do: get_in(config(), [:dns]) || "cloudflare.com"
+  def dns_target, do: safe_host(get_in(config(), [:dns])) || "cloudflare.com"
   def web_target, do: get_in(config(), [:web]) || "https://www.google.com/generate_204"
 
   defp config, do: Application.get_env(:track_conn, :targets, %{})

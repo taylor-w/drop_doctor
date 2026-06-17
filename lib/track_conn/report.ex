@@ -165,7 +165,7 @@ defmodule TrackConn.Report do
   defp csv_field(n) when is_number(n), do: to_string(n)
 
   defp csv_field(value) do
-    str = to_string(value)
+    str = value |> to_string() |> neutralize_formula()
 
     if String.contains?(str, [",", "\"", "\n", "\r"]) do
       ~s("#{String.replace(str, "\"", "\"\"")}")
@@ -173,6 +173,16 @@ defmodule TrackConn.Report do
       str
     end
   end
+
+  # CSV formula injection: this report is meant to be handed to an ISP and opened
+  # in Excel/Sheets, where a cell beginning with = + - @ (or tab/CR) is run as a
+  # formula (DDE / data-exfil). Prefix such a *text* field with a single quote so
+  # the spreadsheet treats it as literal text. Numbers use the is_number clause
+  # above and are never neutralized.
+  defp neutralize_formula(<<c, _::binary>> = str) when c in [?=, ?+, ?-, ?@, ?\t, ?\r],
+    do: "'" <> str
+
+  defp neutralize_formula(str), do: str
 
   # --- HTML ---------------------------------------------------------------
 
