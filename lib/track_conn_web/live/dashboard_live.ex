@@ -1336,9 +1336,10 @@ defmodule TrackConnWeb.DashboardLive do
   defp stats(history) do
     total = length(history)
     healthy = Enum.count(history, &(&1.status == "healthy"))
-    up = Enum.count(history, &(&1.status != "down"))
 
-    %{total: total, healthy: healthy, uptime: round(up / total * 100)}
+    # Headline % is the *healthy* fraction so it agrees with the "X/Y healthy"
+    # label beside it (a degraded-but-up sweep shouldn't read as a perfect score).
+    %{total: total, healthy: healthy, uptime: round(healthy / total * 100)}
   end
 
   defp wsl_warning, do: Net.wsl_router_unresolved?()
