@@ -1,2 +1,2 @@
 ExUnit.start()
-Ecto.Adapters.SQL.Sandbox.mode(TrackConn.Repo, :manual)
+Ecto.Adapters.SQL.Sandbox.mode(DropDoctor.Repo, :manual)

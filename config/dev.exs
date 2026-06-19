@@ -1,8 +1,8 @@
 import Config
 
 # Configure your database
-config :track_conn, TrackConn.Repo,
-  database: Path.expand("../track_conn_dev.db", __DIR__),
+config :drop_doctor, DropDoctor.Repo,
+  database: Path.expand("../drop_doctor_dev.db", __DIR__),
   pool_size: 5,
   stacktrace: true,
   show_sensitive_data_on_connection_error: true
@@ -13,7 +13,7 @@ config :track_conn, TrackConn.Repo,
 # The watchers configuration can be used to run external
 # watchers to your application. For example, we can use it
 # to bundle .js and .css sources.
-config :track_conn, TrackConnWeb.Endpoint,
+config :drop_doctor, DropDoctorWeb.Endpoint,
   # Binding to loopback ipv4 address prevents access from other machines.
   # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
   http: [ip: {127, 0, 0, 1}, port: String.to_integer(System.get_env("PORT", "4000"))],
@@ -22,8 +22,8 @@ config :track_conn, TrackConnWeb.Endpoint,
   debug_errors: true,
   secret_key_base: "5/X9DIxQz5ysqh+4fQPVzZglIKyqzUMYN1iVaK6Pv9/E43uOmPzCzUCOyDB1iI35",
   watchers: [
-    esbuild: {Esbuild, :install_and_run, [:track_conn, ~w(--sourcemap=inline --watch)]},
-    tailwind: {Tailwind, :install_and_run, [:track_conn, ~w(--watch)]}
+    esbuild: {Esbuild, :install_and_run, [:drop_doctor, ~w(--sourcemap=inline --watch)]},
+    tailwind: {Tailwind, :install_and_run, [:drop_doctor, ~w(--watch)]}
   ]
 
 # ## SSL Support
@@ -50,20 +50,20 @@ config :track_conn, TrackConnWeb.Endpoint,
 # different ports.
 
 # Reload browser tabs when matching files change.
-config :track_conn, TrackConnWeb.Endpoint,
+config :drop_doctor, DropDoctorWeb.Endpoint,
   live_reload: [
     web_console_logger: true,
     patterns: [
       # Static assets, except user uploads
       ~r"priv/static/(?!uploads/).*\.(js|css|png|jpeg|jpg|gif|svg)$",
       # Router, Controllers, LiveViews and LiveComponents
-      ~r"lib/track_conn_web/router\.ex$",
-      ~r"lib/track_conn_web/(controllers|live|components)/.*\.(ex|heex)$"
+      ~r"lib/drop_doctor_web/router\.ex$",
+      ~r"lib/drop_doctor_web/(controllers|live|components)/.*\.(ex|heex)$"
     ]
   ]
 
 # Enable dev routes for dashboard and mailbox
-config :track_conn, dev_routes: true
+config :drop_doctor, dev_routes: true
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"

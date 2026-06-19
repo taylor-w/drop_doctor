@@ -1,6 +1,6 @@
 # Development
 
-How to run track_conn from source, test it, and build the distributable
+How to run DropDoctor from source, test it, and build the distributable
 binaries. For what the app does and how to *use* it, see the
 [README](../README.md); for how the code is organized, see
 [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -62,20 +62,20 @@ watch the verdict change. Add a line to `config/dev.exs` and restart the server:
 
 - **Fake an ISP outage** — point the "internet" probe at an unroutable IP:
   ```elixir
-  config :track_conn, :targets, %{internet: "10.255.255.1"}
+  config :drop_doctor, :targets, %{internet: "10.255.255.1"}
   ```
   Expect: 🔴 *"This is your ISP — your router is fine but the internet is
   unreachable."* (router still green, internet red.)
 
 - **Fake a local/router problem** — point "router" at a dead LAN IP:
   ```elixir
-  config :track_conn, :targets, %{router: "192.168.99.99"}
+  config :drop_doctor, :targets, %{router: "192.168.99.99"}
   ```
   Expect: 🔴 *"The problem is on your side — your router isn't responding."*
 
 - **Fake a DNS problem** — point "dns" at a non-existent name:
   ```elixir
-  config :track_conn, :targets, %{dns: "this-name-does-not-exist.invalid"}
+  config :drop_doctor, :targets, %{dns: "this-name-does-not-exist.invalid"}
   ```
   Expect: 🔴 *"Your internet works, but DNS is the problem"* (router + internet
   green, DNS red).
@@ -120,9 +120,9 @@ On first launch it unpacks itself into a per-user cache and starts the server on
 and keeps its history database and a generated session key in a per-user data
 folder (never next to the binary):
 
-- **Windows:** `%APPDATA%\track_conn`
-- **macOS:** `~/Library/Application Support/track_conn`
-- **Linux:** `~/.local/share/track_conn`
+- **Windows:** `%APPDATA%\drop_doctor`
+- **macOS:** `~/Library/Application Support/drop_doctor`
+- **Linux:** `~/.local/share/drop_doctor`
 
 ## Cut a release
 

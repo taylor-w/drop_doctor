@@ -1,4 +1,4 @@
-defmodule TrackConn.Repo.Migrations.CreateSweeps do
+defmodule DropDoctor.Repo.Migrations.CreateSweeps do
   use Ecto.Migration
 
   def change do

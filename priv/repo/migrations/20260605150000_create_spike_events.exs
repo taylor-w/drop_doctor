@@ -1,4 +1,4 @@
-defmodule TrackConn.Repo.Migrations.CreateSpikeEvents do
+defmodule DropDoctor.Repo.Migrations.CreateSpikeEvents do
   use Ecto.Migration
 
   # Discrete instability events caught by the continuous SpikeMonitor — the brief

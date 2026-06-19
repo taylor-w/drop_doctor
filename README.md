@@ -1,13 +1,13 @@
-# 📡 track_conn
+# 📡 DropDoctor
 
 **Is it you, your router, or your ISP? Find out — with proof.**
 
-[![CI](https://github.com/taylor-w/track_conn/actions/workflows/ci.yml/badge.svg)](https://github.com/taylor-w/track_conn/actions/workflows/ci.yml)
+[![CI](https://github.com/taylor-w/drop_doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/taylor-w/drop_doctor/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 When your internet feels bad, the hardest question is *whose fault it is*. The
 ISP blames your equipment, you suspect the ISP, and nobody can prove anything.
-track_conn settles it. It continuously checks every layer between your computer
+DropDoctor settles it. It continuously checks every layer between your computer
 and the open internet, tells you — in one plain sentence — where the problem
 actually is, and keeps a timestamped history you can show your ISP.
 
@@ -23,12 +23,12 @@ your browser opens to the dashboard. Nothing to install.
 
 | Your OS | Download |
 |---------|----------|
-| Windows | [`track_conn_windows.exe`](https://github.com/taylor-w/track_conn/releases/latest/download/track_conn_windows.exe) |
-| macOS (Apple Silicon, M1+) | [`track_conn_macos`](https://github.com/taylor-w/track_conn/releases/latest/download/track_conn_macos) |
-| macOS (Intel) | [`track_conn_macos_intel`](https://github.com/taylor-w/track_conn/releases/latest/download/track_conn_macos_intel) |
-| Linux (x86_64) | [`track_conn_linux`](https://github.com/taylor-w/track_conn/releases/latest/download/track_conn_linux) |
+| Windows | [`drop_doctor_windows.exe`](https://github.com/taylor-w/drop_doctor/releases/latest/download/drop_doctor_windows.exe) |
+| macOS (Apple Silicon, M1+) | [`drop_doctor_macos`](https://github.com/taylor-w/drop_doctor/releases/latest/download/drop_doctor_macos) |
+| macOS (Intel) | [`drop_doctor_macos_intel`](https://github.com/taylor-w/drop_doctor/releases/latest/download/drop_doctor_macos_intel) |
+| Linux (x86_64) | [`drop_doctor_linux`](https://github.com/taylor-w/drop_doctor/releases/latest/download/drop_doctor_linux) |
 
-All downloads are on the **[latest release page](https://github.com/taylor-w/track_conn/releases/latest)**.
+All downloads are on the **[latest release page](https://github.com/taylor-w/drop_doctor/releases/latest)**.
 The app starts at **<http://localhost:4000>** and opens it for you. To quit, run
 it from a terminal and press `Ctrl+C` twice, or end the process from your OS.
 
@@ -37,8 +37,8 @@ it from a terminal and press `Ctrl+C` twice, or end the process from your OS.
 > expected:
 > - **Windows:** "Windows protected your PC" → **More info → Run anyway**.
 > - **macOS:** "developer cannot be verified" → **right-click the app → Open**,
->   then **Open** again. (Or: `xattr -d com.apple.quarantine track_conn_macos`.)
-> - **macOS/Linux:** you may first need to mark it runnable: `chmod +x track_conn_macos`.
+>   then **Open** again. (Or: `xattr -d com.apple.quarantine drop_doctor_macos`.)
+> - **macOS/Linux:** you may first need to mark it runnable: `chmod +x drop_doctor_macos`.
 
 Prefer to run from source, or want to build the binaries yourself? See
 **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**.
@@ -79,7 +79,7 @@ flip the light — a real fault takes ~15–25s of sustained failure to confirm
 
 That smoothing is right for "is my connection down?" but blind to the brief
 stutters that ruin a game or call — it averages them away. So alongside it,
-track_conn continuously samples your router and the open internet (~5×/second)
+DropDoctor continuously samples your router and the open internet (~5×/second)
 and shows the **jitter, worst-case latency (p99), spike count, and brief packet
 loss** for each. That's how you catch an intermittent problem that looks perfectly
 fine "on average".

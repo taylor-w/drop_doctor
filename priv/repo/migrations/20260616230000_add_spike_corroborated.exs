@@ -1,4 +1,4 @@
-defmodule TrackConn.Repo.Migrations.AddSpikeCorroborated do
+defmodule DropDoctor.Repo.Migrations.AddSpikeCorroborated do
   use Ecto.Migration
 
   # Whether an internet spike was confirmed against a second provider's anchor:

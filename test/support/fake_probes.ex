@@ -1,11 +1,11 @@
-defmodule TrackConn.Test.FakeProbes do
+defmodule DropDoctor.Test.FakeProbes do
   @moduledoc """
   Deterministic fake probes so the sweep/monitor can be tested without touching
-  the network. Each implements `TrackConn.Probe`.
+  the network. Each implements `DropDoctor.Probe`.
   """
 
   defmodule HealthyPing do
-    @behaviour TrackConn.Probe
+    @behaviour DropDoctor.Probe
     @impl true
     def run(_target, _opts),
       do: %{
@@ -20,21 +20,21 @@ defmodule TrackConn.Test.FakeProbes do
   end
 
   defmodule HealthyDns do
-    @behaviour TrackConn.Probe
+    @behaviour DropDoctor.Probe
     @impl true
     def run(_target, _opts),
       do: %{ok?: true, ms: 20.0, address: "1.2.3.4", raw: "fake dns", error: nil}
   end
 
   defmodule HealthyHttp do
-    @behaviour TrackConn.Probe
+    @behaviour DropDoctor.Probe
     @impl true
     def run(_target, _opts),
       do: %{ok?: true, ms: 150.0, status: 200, bytes: 0, raw: "fake http", error: nil}
   end
 
   defmodule SlowPing do
-    @behaviour TrackConn.Probe
+    @behaviour DropDoctor.Probe
     @impl true
     def run(_target, _opts) do
       Process.sleep(5_000)

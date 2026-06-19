@@ -1,6 +1,6 @@
 # Architecture
 
-A tour of how track_conn is organized. For running and building it, see
+A tour of how DropDoctor is organized. For running and building it, see
 [DEVELOPMENT.md](DEVELOPMENT.md).
 
 It's a [Phoenix](https://www.phoenixframework.org/) LiveView app: a supervised
@@ -10,7 +10,7 @@ local SQLite file, and broadcasts updates to a single LiveView dashboard.
 ## Module map
 
 ```
-lib/track_conn/
+lib/drop_doctor/
   net.ex                 # cross-platform gateway/router discovery (+ WSL detection)
   targets.ex             # the probe "ladder" definition
   probe.ex               # Probe behaviour + registry (probes are injectable/testable)
@@ -32,8 +32,8 @@ lib/track_conn/
   measurements/spike_event.ex # a logged latency-spike / loss event (ISP proof)
   report.ex              # builds the exportable ISP report (printable HTML + CSV + spike log)
 
-lib/track_conn_web/live/dashboard_live.ex            # the single-screen LiveView dashboard
-lib/track_conn_web/controllers/report_controller.ex  # serves /report (HTML) and /report.csv
+lib/drop_doctor_web/live/dashboard_live.ex            # the single-screen LiveView dashboard
+lib/drop_doctor_web/controllers/report_controller.ex  # serves /report (HTML) and /report.csv
 ```
 
 ## Design properties worth knowing

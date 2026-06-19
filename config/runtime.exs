@@ -12,19 +12,19 @@ import Config
 # If you use `mix release`, you need to explicitly enable the server
 # by passing the PHX_SERVER=true when you start it:
 #
-#     PHX_SERVER=true bin/track_conn start
+#     PHX_SERVER=true bin/drop_doctor start
 #
 # Alternatively, you can use `mix phx.gen.release` to generate a `bin/server`
 # script that automatically sets the env var above.
 if System.get_env("PHX_SERVER") do
-  config :track_conn, TrackConnWeb.Endpoint, server: true
+  config :drop_doctor, DropDoctorWeb.Endpoint, server: true
 end
 
-config :track_conn, TrackConnWeb.Endpoint,
+config :drop_doctor, DropDoctorWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
 if config_env() == :prod do
-  # track_conn ships as a double-clickable Burrito binary, so prod must run with
+  # drop_doctor ships as a double-clickable Burrito binary, so prod must run with
   # ZERO required env vars or terminal interaction: a non-technical user just
   # launches it. Everything below therefore *defaults* sensibly and only treats
   # env vars as optional overrides for power users / server deployments.
@@ -32,15 +32,15 @@ if config_env() == :prod do
   # Per-user, writable data directory — the read-only extracted Burrito payload
   # is NOT writable, so the DB and secret must live here. `:filename.basedir`
   # resolves the right place on each OS:
-  #   Linux:   ~/.local/share/track_conn
-  #   macOS:   ~/Library/Application Support/track_conn
-  #   Windows: %APPDATA%\track_conn
-  data_dir = System.get_env("TRACK_CONN_DATA_DIR") || :filename.basedir(:user_data, "track_conn")
+  #   Linux:   ~/.local/share/drop_doctor
+  #   macOS:   ~/Library/Application Support/drop_doctor
+  #   Windows: %APPDATA%\drop_doctor
+  data_dir = System.get_env("DROP_DOCTOR_DATA_DIR") || :filename.basedir(:user_data, "drop_doctor")
   File.mkdir_p!(data_dir)
 
-  database_path = System.get_env("DATABASE_PATH") || Path.join(data_dir, "track_conn.db")
+  database_path = System.get_env("DATABASE_PATH") || Path.join(data_dir, "drop_doctor.db")
 
-  config :track_conn, TrackConn.Repo,
+  config :drop_doctor, DropDoctor.Repo,
     database: database_path,
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5")
 
@@ -65,11 +65,11 @@ if config_env() == :prod do
         end
       )
 
-  config :track_conn, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
+  config :drop_doctor, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
   # Always serve when launched as a release — the binary's whole purpose is the
   # web UI, and there's no terminal to set PHX_SERVER on a double-click.
-  config :track_conn, TrackConnWeb.Endpoint,
+  config :drop_doctor, DropDoctorWeb.Endpoint,
     server: true,
     url: [
       host: "localhost",

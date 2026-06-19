@@ -1,18 +1,18 @@
-defmodule TrackConn.MixProject do
+defmodule DropDoctor.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :track_conn,
+      app: :drop_doctor,
       version: "0.1.6",
       elixir: "~> 1.15",
       description:
         "Is bad internet your fault, your DNS, or your ISP? A local tool that finds out — with timestamped proof.",
-      source_url: "https://github.com/taylor-w/track_conn",
-      homepage_url: "https://github.com/taylor-w/track_conn",
+      source_url: "https://github.com/taylor-w/drop_doctor",
+      homepage_url: "https://github.com/taylor-w/drop_doctor",
       package: [
         licenses: ["MIT"],
-        links: %{"GitHub" => "https://github.com/taylor-w/track_conn"}
+        links: %{"GitHub" => "https://github.com/taylor-w/drop_doctor"}
       ],
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -30,10 +30,10 @@ defmodule TrackConn.MixProject do
   #
   # Build all targets:   MIX_ENV=prod mix release
   # Build one target:    BURRITO_TARGET=linux MIX_ENV=prod mix release
-  # Output:              burrito_out/track_conn_<target>[.exe]
+  # Output:              burrito_out/drop_doctor_<target>[.exe]
   defp releases do
     [
-      track_conn: [
+      drop_doctor: [
         steps: [:assemble, &Burrito.wrap/1],
         burrito: [
           targets: [
@@ -52,7 +52,7 @@ defmodule TrackConn.MixProject do
   # Type `mix help compile.app` for more information.
   def application do
     [
-      mod: {TrackConn.Application, []},
+      mod: {DropDoctor.Application, []},
       extra_applications: [:logger, :runtime_tools, :inets, :ssl]
     ]
   end
@@ -114,15 +114,15 @@ defmodule TrackConn.MixProject do
       "ecto.reset": ["ecto.drop", "ecto.setup"],
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
-      "assets.build": ["compile", "tailwind track_conn", "esbuild track_conn"],
+      "assets.build": ["compile", "tailwind drop_doctor", "esbuild drop_doctor"],
       "assets.deploy": [
         # Compile first so colocated JS hooks are (re)extracted to
         # _build/<env>/phoenix-colocated *before* esbuild bundles — otherwise a
         # stale/empty extraction silently drops every hook from the minified
         # bundle (dead timeline chart, no flash auto-dismiss). Mirrors assets.build.
         "compile",
-        "tailwind track_conn --minify",
-        "esbuild track_conn --minify",
+        "tailwind drop_doctor --minify",
+        "esbuild drop_doctor --minify",
         "phx.digest"
       ],
       precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]

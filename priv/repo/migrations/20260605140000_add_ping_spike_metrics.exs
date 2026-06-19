@@ -1,4 +1,4 @@
-defmodule TrackConn.Repo.Migrations.AddPingSpikeMetrics do
+defmodule DropDoctor.Repo.Migrations.AddPingSpikeMetrics do
   use Ecto.Migration
 
   # Worst single round-trip (the latency spike) and jitter (RTT mean deviation)
