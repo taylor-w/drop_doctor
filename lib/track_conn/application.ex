@@ -27,6 +27,11 @@ defmodule TrackConn.Application do
     # via :start_monitor config.
     children =
       if Application.get_env(:track_conn, :start_monitor, true) do
+        # Clean up any resident pings orphaned by a previous run before starting
+        # our own, so they can't accumulate across restarts into an ICMP flood
+        # that gets our probe targets rate-limited. See Probes.Ping.stream/3.
+        TrackConn.Probes.Ping.reap_orphaned_streams()
+
         children
         |> List.insert_at(-2, TrackConn.Monitor)
         |> List.insert_at(

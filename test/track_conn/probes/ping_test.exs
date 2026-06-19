@@ -125,4 +125,44 @@ defmodule TrackConn.Probes.PingTest do
       assert Ping.parse_stream_line("") == :ignore
     end
   end
+
+  describe "stream/3 process lifecycle" do
+    @describetag :integration
+
+    # Regression guard for the resident-ping leak: when the reader is stopped the
+    # OS ping must die too (the babysitter wrapper), otherwise orphaned pings pile
+    # up across restarts into a self-inflicted ICMP flood. Linux/`pgrep` only.
+    test "stops the OS ping when its reader is killed (no orphan)" do
+      if File.dir?("/proc") and System.find_executable("pgrep") do
+        match = "ping -O -i 0.2 127.0.0.1"
+        reader = Ping.stream(self(), "127.0.0.1", interval: 0.2)
+        ref = Process.monitor(reader)
+
+        # a streamed line proves the ping is up and running under the wrapper
+        assert_receive {:stream_line, ^reader, _line}, 3000
+        before = pgrep(match)
+        assert before != [], "expected the resident ping to be running"
+
+        Process.exit(reader, :kill)
+        assert_receive {:DOWN, ^ref, :process, ^reader, _}, 1000
+        Process.sleep(800)
+
+        survivors = Enum.filter(pgrep(match), &(&1 in before))
+        # clean up anything that did survive so a failure can't leak into CI
+        Enum.each(survivors, &System.cmd("kill", ["-KILL", &1]))
+        assert survivors == [], "ping #{inspect(survivors)} survived the reader (orphan leak)"
+      end
+    end
+
+    defp pgrep(pattern) do
+      case System.cmd("pgrep", ["-f", pattern], stderr_to_stdout: true) do
+        {out, _} -> String.split(out)
+        _ -> []
+      end
+    end
+  end
+
+  test "reap_orphaned_streams/0 is a safe no-op that returns :ok" do
+    assert Ping.reap_orphaned_streams() == :ok
+  end
 end

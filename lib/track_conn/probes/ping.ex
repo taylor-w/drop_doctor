@@ -32,6 +32,31 @@ defmodule TrackConn.Probes.Ping do
   # seconds we are willing to wait per packet before giving up
   @default_timeout 2
 
+  # Babysitter wrapper for the *resident* ping (see `run_stream/3`). It guarantees
+  # the OS ping dies when the Erlang port closes (pause / anchor-switch) OR the
+  # BEAM itself dies abnormally (crash, Ctrl-C, the WSL host sleeping). Mechanism:
+  #
+  #   * `exec 3<&0` saves the port's stdin — a *backgrounded* subshell otherwise
+  #     inherits /dev/null for stdin, so the watcher would see EOF immediately.
+  #   * the watcher blocks on that fd via `cat <&3`; the instant the port (or the
+  #     whole BEAM) goes away the pipe closes, `cat` returns, and it TERMs ping.
+  #   * if ping exits on its own, `wait` returns and the wrapper exits too, so the
+  #     monitor still sees `:exit_status` and restarts the stream.
+  #
+  # ping args are passed positionally (`"$@"`), never spliced into the script, so
+  # a host string can't inject shell. Without this, iputils `ping` ignores the
+  # closed pipe (it doesn't read stdin and shrugs off SIGPIPE) and keeps sending
+  # forever; orphaned resident pings then pile up across restarts into a
+  # self-inflicted ICMP flood that gets our own probe targets rate-limited.
+  @babysitter ~S"""
+  exec 3<&0
+  "$@" & pid=$!
+  ( cat <&3 >/dev/null; kill -TERM "$pid" 2>/dev/null ) &
+  wait "$pid"; rc=$?
+  kill -TERM "$!" 2>/dev/null
+  exit "$rc"
+  """
+
   def run(host, opts \\ []) do
     count = Keyword.get(opts, :count, @default_count)
     timeout = Keyword.get(opts, :timeout, @default_timeout)
@@ -90,12 +115,89 @@ defmodule TrackConn.Probes.Ping do
     spawn(fn -> run_stream(owner, host, interval) end)
   end
 
+  @doc """
+  Best-effort cleanup of *orphaned* resident pings — ones left sending by a
+  previous run that died before `@babysitter` could stop them (an old build, or
+  the wrapper itself getting hard-killed). Run once at boot so they can't pile up
+  across restarts into a self-inflicted ICMP flood.
+
+  Only kills a `ping` that (a) carries our resident `-O -i` signature and (b)
+  whose direct parent isn't our spawner (`erl_child_setup` or the babysitter
+  `sh`) — meaning it was reparented to a reaper (pid 1 / systemd / a WSL "Relay")
+  and is therefore an orphan. A live monitor's ping always has one of those two
+  parents, so other running instances are never touched. Linux/`/proc` only; a
+  no-op that never raises elsewhere.
+  """
+  def reap_orphaned_streams do
+    with {:unix, _} <- :os.type(),
+         true <- File.dir?("/proc") do
+      "/proc"
+      |> File.ls!()
+      |> Enum.filter(&Regex.match?(~r/^\d+$/, &1))
+      |> Enum.each(fn pid ->
+        if resident_ping?(pid) and orphaned?(pid),
+          do: System.cmd("kill", ["-TERM", pid], stderr_to_stdout: true)
+      end)
+    end
+
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  # A process is one of our resident pings if its executable is `ping` and its
+  # args carry the streaming signature (`-O -i`). /proc/<pid>/cmdline is
+  # NUL-separated; a vanished pid reads as :error → not a match.
+  defp resident_ping?(pid) do
+    case File.read("/proc/#{pid}/cmdline") do
+      {:ok, raw} ->
+        parts = String.split(raw, <<0>>, trim: true)
+        Path.basename(List.first(parts) || "") == "ping" and "-O" in parts and "-i" in parts
+
+      _ ->
+        false
+    end
+  end
+
+  # A live monitor ping's direct parent is always our spawner: `erl_child_setup`
+  # (the old direct spawn) or the babysitter `sh`. Any other parent means it was
+  # reparented to a reaper (pid 1 / systemd / a WSL "Relay") — i.e. an orphan.
+  # Parent-only is deliberate: a reaper's own ancestry isn't reliably readable
+  # under WSL, and the live set is a closed, known pair. An unreadable parent
+  # returns false (don't kill) so we never reap a ping we couldn't vet.
+  @live_ping_parents ["erl_child_setup", "sh", "dash"]
+
+  defp orphaned?(pid) do
+    case parent_comm(pid) do
+      {:ok, comm} -> comm not in @live_ping_parents
+      :error -> false
+    end
+  end
+
+  defp parent_comm(pid) do
+    with {:ok, stat} <- File.read("/proc/#{pid}/stat"),
+         ppid when is_binary(ppid) <- ppid_from_stat(stat),
+         {:ok, comm} <- File.read("/proc/#{ppid}/comm") do
+      {:ok, String.trim(comm)}
+    else
+      _ -> :error
+    end
+  end
+
+  # /proc/<pid>/stat is "pid (comm) state ppid ..."; comm can contain spaces and
+  # parens, so split on the *last* ")" and take ppid (2nd field after state).
+  defp ppid_from_stat(stat) do
+    case String.split(stat, ")", parts: 2) do
+      [_, rest] -> rest |> String.trim_leading() |> String.split() |> Enum.at(1)
+      _ -> nil
+    end
+  end
+
   defp run_stream(owner, host, interval) do
-    {cmd, args} = stream_command(host, interval)
-    path = System.find_executable(cmd) || cmd
+    {exe, args} = spawn_command(stream_command(host, interval))
 
     port =
-      Port.open({:spawn_executable, path}, [
+      Port.open({:spawn_executable, exe}, [
         :binary,
         :exit_status,
         :hide,
@@ -106,6 +208,22 @@ defmodule TrackConn.Probes.Ping do
     stream_loop(owner, port)
   rescue
     e -> send(owner, {:stream_down, self(), Exception.message(e)})
+  end
+
+  # Resolve the logical `{cmd, args}` from `stream_command/2` into the
+  # `{executable, args}` we actually spawn. On Unix/macOS the ping runs under the
+  # `@babysitter` sh wrapper so it can't outlive its port; on Windows we spawn
+  # ping directly (the wrapper is POSIX sh, and Windows port teardown differs).
+  defp spawn_command({cmd, args}) do
+    case :os.type() do
+      {:win32, _} ->
+        {System.find_executable(cmd) || cmd, args}
+
+      _ ->
+        sh = System.find_executable("sh") || "/bin/sh"
+        ping = System.find_executable(cmd) || cmd
+        {sh, ["-c", @babysitter, "sh", ping | args]}
+    end
   end
 
   defp stream_loop(owner, port) do
