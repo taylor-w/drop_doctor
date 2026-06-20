@@ -23,7 +23,7 @@ defmodule DropDoctor.Report do
   and free of any web or rendering dependency.
   """
 
-  alias DropDoctor.{Measurements, Monitor, Net, SpikeAnalysis, Targets}
+  alias DropDoctor.{Format, Measurements, Monitor, Net, SpikeAnalysis, Targets}
 
   @csv_columns ~w(
     timestamp_utc status culprit headline
@@ -63,6 +63,10 @@ defmodule DropDoctor.Report do
           Measurements.recent_spike_events(Keyword.get(opts, :limit, @default_limit))
         end)
         |> SpikeAnalysis.annotate(),
+      speed_tests:
+        Keyword.get_lazy(opts, :speed_tests, fn ->
+          Measurements.recent_speed_tests(Keyword.get(opts, :limit, @default_limit))
+        end),
       stats: stats(sweeps),
       targets: targets(),
       wsl?: Net.wsl?(),
@@ -77,7 +81,7 @@ defmodule DropDoctor.Report do
   end
 
   @doc "A filename with the generation timestamp baked in, e.g. `drop_doctor-isp-report-2026-06-05_1300Z.csv`."
-  def filename(format, %DateTime{} = at) when format in [:csv, :html, :spikes] do
+  def filename(format, %DateTime{} = at) when format in [:csv, :html, :spikes, :speeds] do
     stamp =
       at
       |> DateTime.truncate(:second)
@@ -87,6 +91,7 @@ defmodule DropDoctor.Report do
       :html -> "drop_doctor-isp-report-#{stamp}.html"
       :csv -> "drop_doctor-isp-report-#{stamp}.csv"
       :spikes -> "drop_doctor-spike-log-#{stamp}.csv"
+      :speeds -> "drop_doctor-speed-tests-#{stamp}.csv"
     end
   end
 
@@ -97,14 +102,10 @@ defmodule DropDoctor.Report do
   timeline). One row per recorded measurement.
   """
   def to_csv(%{sweeps: sweeps}) do
-    rows =
-      sweeps
-      |> Enum.reverse()
-      |> Enum.map(&csv_row/1)
-
-    [Enum.join(@csv_columns, ",") | rows]
-    |> Enum.join("\r\n")
-    |> Kernel.<>("\r\n")
+    sweeps
+    |> Enum.reverse()
+    |> Enum.map(&csv_row/1)
+    |> build_csv(@csv_columns)
   end
 
   defp csv_row(s) do
@@ -133,14 +134,10 @@ defmodule DropDoctor.Report do
   intermittent spikes/loss that the smoothed sweep timeline averages away.
   """
   def spikes_csv(%{spike_events: events}) do
-    rows =
-      events
-      |> Enum.reverse()
-      |> Enum.map(&spike_csv_row/1)
-
-    [Enum.join(@spikes_csv_columns, ",") | rows]
-    |> Enum.join("\r\n")
-    |> Kernel.<>("\r\n")
+    events
+    |> Enum.reverse()
+    |> Enum.map(&spike_csv_row/1)
+    |> build_csv(@spikes_csv_columns)
   end
 
   defp spike_csv_row(e) do
@@ -156,6 +153,45 @@ defmodule DropDoctor.Report do
       Map.get(e, :source),
       Map.get(e, :co_occurring?),
       Map.get(e, :corroborated)
+    ]
+    |> Enum.map(&csv_field/1)
+    |> Enum.join(",")
+  end
+
+  @speeds_csv_columns ~w(
+    timestamp_utc download_mbps upload_mbps latency_ms jitter_ms server ok error
+  )
+
+  @doc """
+  The recorded speed tests as CSV, oldest first — the timestamped record of the
+  download/upload throughput actually delivered, to set against the tier sold.
+  """
+  def speeds_csv(%{speed_tests: tests}) do
+    tests
+    |> Enum.reverse()
+    |> Enum.map(&speed_csv_row/1)
+    |> build_csv(@speeds_csv_columns)
+  end
+
+  # Assemble a CSV body shared by every export: the header row, then the data
+  # rows, CRLF-terminated with a trailing newline so Excel opens it cleanly. One
+  # definition so a change to framing/quoting can't be applied to two of three.
+  defp build_csv(rows, columns) do
+    [Enum.join(columns, ",") | rows]
+    |> Enum.join("\r\n")
+    |> Kernel.<>("\r\n")
+  end
+
+  defp speed_csv_row(t) do
+    [
+      iso8601(t.measured_at),
+      t.download_mbps,
+      t.upload_mbps,
+      t.latency_ms,
+      t.jitter_ms,
+      t.server,
+      t.ok,
+      t.error
     ]
     |> Enum.map(&csv_field/1)
     |> Enum.join(",")
@@ -207,6 +243,7 @@ defmodule DropDoctor.Report do
     <main>
     #{header_section(report)}
     #{verdict_section(report.verdict)}
+    #{speed_section(report.speed_tests)}
     #{deep_section(report.deep)}
     #{stability_section(report.spike_events)}
     #{history_section(report.stats)}
@@ -300,6 +337,7 @@ defmodule DropDoctor.Report do
       <button onclick="dropDoctorPrint()">#{ico("printer")} Save as PDF / Print</button>
       <a href="/report.csv">#{ico("download")} Download raw data (CSV)</a>
       <a href="/spikes.csv">#{ico("zap")} Spike log (CSV)</a>
+      <a href="/speeds.csv">#{ico("gauge")} Speed tests (CSV)</a>
       <span class="hint">Tip: in the print dialog choose “Save as PDF” as the destination.</span>
       <div class="tc-controls">
         <span class="tc-seg" role="group" aria-label="Stream-safe privacy" title="Stream-safe: hide IPs, hostnames & times so you can screen-share. Blur = hover to peek; lock = redact.">
@@ -350,6 +388,9 @@ defmodule DropDoctor.Report do
 
   defp ico_path("clock"),
     do: ~S(<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>)
+
+  defp ico_path("gauge"),
+    do: ~S(<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>)
 
   # ISO-8601 UTC for the client-side timezone toggle (NaiveDateTime assumed UTC).
   defp iso_utc(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
@@ -475,6 +516,54 @@ defmodule DropDoctor.Report do
   end
 
   defp deep_section(_), do: ""
+
+  defp speed_section([]) do
+    """
+    <section class="speed">
+      <h2>Speed test</h2>
+      <p class="muted">No download/upload speed test has been run in this session. Open the dashboard
+      and click “Test speed” to add a measured-throughput snapshot to this report.</p>
+    </section>
+    """
+  end
+
+  defp speed_section(tests) when is_list(tests) and tests != [] do
+    latest = List.first(tests)
+
+    rows =
+      tests
+      |> Enum.take(20)
+      |> Enum.map_join("", fn t ->
+        """
+        <tr class="#{if t.ok, do: "", else: "down"}">
+          <td class="mono">#{time_el(t.measured_at)}</td>
+          <td class="mono num">#{esc(fmt_mbps(t.download_mbps))}</td>
+          <td class="mono num">#{esc(fmt_mbps(t.upload_mbps))}</td>
+          <td class="mono num">#{esc(fmt_ms(t.latency_ms))}</td>
+          <td class="mono num">#{esc(fmt_ms(t.jitter_ms))}</td>
+          <td class="mono">#{esc(t.server)}</td>
+        </tr>
+        """
+      end)
+
+    """
+    <section class="speed">
+      <h2>Speed test — delivered throughput</h2>
+      <p class="headline">Latest: <strong>#{esc(fmt_mbps(latest.download_mbps))} Mbps</strong> down ·
+      <strong>#{esc(fmt_mbps(latest.upload_mbps))} Mbps</strong> up
+      <span class="muted">(#{time_el(latest.measured_at)} <span class="tc-secret" data-tz-zone>UTC</span>)</span></p>
+      <p class="muted small">Measured with parallel connections against #{esc(latest.server)} — the same
+      method speed tests use. Set these against the speed tier your plan advertises.</p>
+      <table class="speeds">
+        <thead><tr><th>When (<span class="tc-secret" data-tz-zone>UTC</span>)</th><th>Down (Mbps)</th><th>Up (Mbps)</th><th>Latency</th><th>Jitter</th><th>Server</th></tr></thead>
+        <tbody>#{rows}</tbody>
+      </table>
+      #{if length(tests) > 20, do: ~s(<p class="muted small">Showing the 20 most recent — the full list is in the speed-tests CSV.</p>), else: ~s(<p class="muted small">Full list with exact values is in the speed-tests CSV export.</p>)}
+    </section>
+    """
+  end
+
+  defp speed_section(_), do: ""
 
   defp stability_section([]) do
     """
@@ -699,9 +788,8 @@ defmodule DropDoctor.Report do
   defp fmt_pct(loss, %{phantom_loss?: true}), do: "#{fmt_num(loss)}% (phantom)"
   defp fmt_pct(loss, _), do: "#{fmt_num(loss)}%"
 
-  defp fmt_ms(nil), do: "—"
-  defp fmt_ms(n) when is_number(n), do: "#{Float.round(n / 1, 1)}ms"
-  defp fmt_ms(_), do: "—"
+  defp fmt_ms(n), do: Format.ms(n)
+  defp fmt_mbps(n), do: Format.mbps(n)
 
   defp fmt_num(n) when is_float(n), do: Float.round(n, 1)
   defp fmt_num(n) when is_number(n), do: n
@@ -905,11 +993,11 @@ defmodule DropDoctor.Report do
                color: var(--ink); cursor: pointer; text-decoration: none; transition: background-color .15s, border-color .15s; }
     .toolbar > button:hover, .toolbar > a:hover { border-color: color-mix(in oklab, var(--ink) 28%, transparent);
                background-color: color-mix(in oklab, var(--ink) 12%, transparent); }
-    .toolbar > button { color: #fff; border-color: color-mix(in oklab, var(--primary) 55%, transparent);
-               background-color: color-mix(in oklab, var(--primary) 88%, transparent);
-               background-image: linear-gradient(180deg, color-mix(in oklab, white 16%, transparent), transparent 55%);
-               box-shadow: inset 0 1px 0 0 color-mix(in oklab, white 22%, transparent), 0 6px 16px -10px color-mix(in oklab, var(--primary) 85%, transparent); }
-    .toolbar > button:hover { background-color: var(--primary); border-color: var(--primary); }
+    .toolbar > button { color: #fff; border-color: color-mix(in oklab, var(--primary) 38%, transparent);
+               background-color: color-mix(in oklab, var(--primary) 80%, var(--card));
+               background-image: linear-gradient(180deg, color-mix(in oklab, white 9%, transparent), transparent 60%);
+               box-shadow: inset 0 1px 0 0 color-mix(in oklab, white 12%, transparent); }
+    .toolbar > button:hover { background-color: color-mix(in oklab, var(--primary) 92%, var(--card)); border-color: color-mix(in oklab, var(--primary) 55%, transparent); }
     .toolbar .hint { color: var(--muted); font-size: .82rem; }
     /* View controls: stream-safe privacy + timezone toggle (match the dashboard). */
     .tc-controls { display: inline-flex; align-items: center; gap: .5rem; margin-left: auto; }

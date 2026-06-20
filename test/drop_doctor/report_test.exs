@@ -75,10 +75,43 @@ defmodule DropDoctor.ReportTest do
   defp build(opts \\ []) do
     Report.build(
       Keyword.merge(
-        [now: @now, verdict: verdict(), deep: deep_report(), sweeps: sweeps(), spike_events: []],
+        [
+          now: @now,
+          verdict: verdict(),
+          deep: deep_report(),
+          sweeps: sweeps(),
+          spike_events: [],
+          speed_tests: []
+        ],
         opts
       )
     )
+  end
+
+  # Two recorded speed tests (newest first), for the speed-section tests.
+  defp speed_tests do
+    [
+      %DropDoctor.Measurements.SpeedTest{
+        measured_at: ~U[2026-06-05 12:59:50Z],
+        download_mbps: 94.2,
+        upload_mbps: 11.7,
+        latency_ms: 18.0,
+        jitter_ms: 1.5,
+        server: "speed.cloudflare.com",
+        ok: true,
+        error: nil
+      },
+      %DropDoctor.Measurements.SpeedTest{
+        measured_at: ~U[2026-06-05 12:59:30Z],
+        download_mbps: nil,
+        upload_mbps: nil,
+        latency_ms: nil,
+        jitter_ms: nil,
+        server: "speed.cloudflare.com",
+        ok: false,
+        error: "connection failed"
+      }
+    ]
   end
 
   # Two logged instability events (newest first), for the spike-log tests.
@@ -107,10 +140,49 @@ defmodule DropDoctor.ReportTest do
     ]
   end
 
+  describe "speed test section" do
+    test "to_html renders the latest result and the per-test figures" do
+      html = build(speed_tests: speed_tests()) |> Report.to_html()
+      assert html =~ "Speed test"
+      assert html =~ "94.2"
+      assert html =~ "11.7"
+    end
+
+    test "to_html shows a placeholder when no speed test has been run" do
+      html = build(speed_tests: []) |> Report.to_html()
+      assert html =~ "No download/upload speed test"
+    end
+
+    test "speeds_csv has a header and one row per test, oldest first" do
+      csv = build(speed_tests: speed_tests()) |> Report.speeds_csv()
+      lines = String.split(csv, "\r\n", trim: true)
+
+      assert hd(lines) ==
+               "timestamp_utc,download_mbps,upload_mbps,latency_ms,jitter_ms,server,ok,error"
+
+      # 1 header + 2 data rows
+      assert length(lines) == 3
+      # oldest (failed) row first — nil metrics render as empty fields
+      assert Enum.at(lines, 1) =~
+               "2026-06-05T12:59:30Z,,,,,speed.cloudflare.com,false,connection failed"
+
+      # newest (ok) row last
+      assert List.last(lines) =~
+               "2026-06-05T12:59:50Z,94.2,11.7,18.0,1.5,speed.cloudflare.com,true,"
+    end
+  end
+
   describe "stats" do
     test "counts states, uptime, and the time window" do
       stats =
-        Report.build(now: @now, verdict: verdict(), deep: nil, sweeps: sweeps(), spike_events: []).stats
+        Report.build(
+          now: @now,
+          verdict: verdict(),
+          deep: nil,
+          sweeps: sweeps(),
+          spike_events: [],
+          speed_tests: []
+        ).stats
 
       assert stats.total == 3
       assert stats.healthy == 1
@@ -122,7 +194,14 @@ defmodule DropDoctor.ReportTest do
 
     test "is safe with no history" do
       stats =
-        Report.build(now: @now, verdict: verdict(), deep: nil, sweeps: [], spike_events: []).stats
+        Report.build(
+          now: @now,
+          verdict: verdict(),
+          deep: nil,
+          sweeps: [],
+          spike_events: [],
+          speed_tests: []
+        ).stats
 
       assert stats.total == 0
       assert stats.uptime == 100
@@ -158,7 +237,14 @@ defmodule DropDoctor.ReportTest do
       tricky = [%{hd(tricky) | headline: ~s(it's "fine", really)}]
 
       csv =
-        Report.build(now: @now, verdict: verdict(), deep: nil, sweeps: tricky, spike_events: [])
+        Report.build(
+          now: @now,
+          verdict: verdict(),
+          deep: nil,
+          sweeps: tricky,
+          spike_events: [],
+          speed_tests: []
+        )
         |> Report.to_csv()
 
       assert csv =~ ~s("it's ""fine"", really")
@@ -189,7 +275,14 @@ defmodule DropDoctor.ReportTest do
       v = %{verdict() | headline: "<script>alert(1)</script> & friends"}
 
       html =
-        Report.build(now: @now, verdict: v, deep: nil, sweeps: sweeps(), spike_events: [])
+        Report.build(
+          now: @now,
+          verdict: v,
+          deep: nil,
+          sweeps: sweeps(),
+          spike_events: [],
+          speed_tests: []
+        )
         |> Report.to_html()
 
       refute html =~ "<script>alert(1)</script>"
@@ -198,7 +291,14 @@ defmodule DropDoctor.ReportTest do
 
     test "handles a missing deep trace gracefully" do
       html =
-        Report.build(now: @now, verdict: verdict(), deep: nil, sweeps: sweeps(), spike_events: [])
+        Report.build(
+          now: @now,
+          verdict: verdict(),
+          deep: nil,
+          sweeps: sweeps(),
+          spike_events: [],
+          speed_tests: []
+        )
         |> Report.to_html()
 
       assert html =~ "No deep diagnostic has been run"
@@ -221,7 +321,8 @@ defmodule DropDoctor.ReportTest do
           verdict: verdict(),
           deep: nil,
           sweeps: [],
-          spike_events: spike_events()
+          spike_events: spike_events(),
+          speed_tests: []
         )
         |> Report.spikes_csv()
 
@@ -251,7 +352,14 @@ defmodule DropDoctor.ReportTest do
       }
 
       csv =
-        Report.build(now: @now, verdict: verdict(), deep: nil, sweeps: [], spike_events: [evil])
+        Report.build(
+          now: @now,
+          verdict: verdict(),
+          deep: nil,
+          sweeps: [],
+          spike_events: [evil],
+          speed_tests: []
+        )
         |> Report.spikes_csv()
 
       # prefixed with ' so a spreadsheet treats =2+2 as literal text, not a formula
@@ -261,7 +369,14 @@ defmodule DropDoctor.ReportTest do
 
     test "empty spike log still yields a valid header-only CSV" do
       csv =
-        Report.build(now: @now, verdict: verdict(), deep: nil, sweeps: [], spike_events: [])
+        Report.build(
+          now: @now,
+          verdict: verdict(),
+          deep: nil,
+          sweeps: [],
+          spike_events: [],
+          speed_tests: []
+        )
         |> Report.spikes_csv()
 
       assert csv ==
@@ -275,7 +390,8 @@ defmodule DropDoctor.ReportTest do
           verdict: verdict(),
           deep: nil,
           sweeps: [],
-          spike_events: spike_events()
+          spike_events: spike_events(),
+          speed_tests: []
         )
         |> Report.to_html()
 

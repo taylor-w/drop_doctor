@@ -41,4 +41,15 @@ defmodule DropDoctorWeb.ReportControllerTest do
     conn = get(conn, "/report.csv?limit=99999999")
     assert response(conn, 200) =~ "timestamp_utc"
   end
+
+  test "GET /speeds.csv downloads the speed-test CSV with the header row", %{conn: conn} do
+    conn = get(conn, "/speeds.csv")
+
+    assert response_content_type(conn, :csv) =~ "text/csv"
+
+    assert get_resp_header(conn, "content-disposition") |> hd() =~
+             "attachment; filename=\"drop_doctor-speed-tests-"
+
+    assert response(conn, 200) =~ "timestamp_utc,download_mbps,upload_mbps"
+  end
 end

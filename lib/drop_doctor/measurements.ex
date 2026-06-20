@@ -5,7 +5,7 @@ defmodule DropDoctor.Measurements do
   """
   import Ecto.Query
   alias DropDoctor.Repo
-  alias DropDoctor.Measurements.{SpikeEvent, Sweep}
+  alias DropDoctor.Measurements.{SpeedTest, SpikeEvent, Sweep}
 
   @doc """
   Persists a verdict (the map produced by `DropDoctor.Diagnosis.analyze/1`) as a
@@ -102,6 +102,51 @@ defmodule DropDoctor.Measurements do
   @doc "Total number of recorded spike events."
   def count_spike_events, do: Repo.aggregate(SpikeEvent, :count)
 
+  # --- speed tests --------------------------------------------------------
+
+  @doc """
+  Persist one speed-test result — the map produced server-side from the browser
+  `.SpeedTest` hook's payload (see `DropDoctorWeb.DashboardLive`). The result's
+  `:ok?` key is mapped to the stored `:ok` column; everything else maps straight
+  across. The changeset bounds-checks the figures, so an implausible client
+  payload is rejected rather than stored as "proof".
+  """
+  def record_speed_test(result) do
+    attrs = %{
+      measured_at: result.measured_at,
+      download_mbps: result.download_mbps,
+      upload_mbps: result.upload_mbps,
+      latency_ms: result.latency_ms,
+      jitter_ms: result.jitter_ms,
+      server: result.server,
+      down_bytes: result.down_bytes,
+      up_bytes: result.up_bytes,
+      ok: result.ok?,
+      error: result.error
+    }
+
+    %SpeedTest{} |> SpeedTest.changeset(attrs) |> Repo.insert()
+  end
+
+  @doc "Recent speed tests, newest first."
+  def recent_speed_tests(limit \\ 50) do
+    SpeedTest
+    |> order_by(desc: :measured_at)
+    |> limit(^limit)
+    |> Repo.all()
+  end
+
+  @doc "The most recent speed test, or `nil` if none has been run."
+  def latest_speed_test do
+    SpeedTest
+    |> order_by(desc: :measured_at)
+    |> limit(1)
+    |> Repo.one()
+  end
+
+  @doc "Total number of recorded speed tests."
+  def count_speed_tests, do: Repo.aggregate(SpeedTest, :count)
+
   @doc """
   Wipes *all* recorded history — every sweep and every spike event — for a clean
   slate. Irreversible; the UI guards it behind a confirmation and an "export
@@ -110,13 +155,19 @@ defmodule DropDoctor.Measurements do
   def reset do
     {sweeps, _} = Repo.delete_all(Sweep)
     {events, _} = Repo.delete_all(SpikeEvent)
-    sweeps + events
+    {speeds, _} = Repo.delete_all(SpeedTest)
+    sweeps + events + speeds
   end
 
   @doc """
   Deletes sweeps and spike events older than `max_age` seconds. Keeps the SQLite
   file bounded — a sweep every 5s is ~17k rows/day, so without this the history
   grows forever. Returns the total number of rows deleted.
+
+  Speed tests are deliberately *not* pruned: they're rare, hand-triggered
+  snapshots kept as durable proof of delivered throughput against the tier an
+  ISP sells, and that evidence loses its value if it silently evaporates after a
+  couple of days. Their volume is negligible, and `reset/0` still clears them.
   """
   def prune(max_age_seconds) do
     cutoff = DateTime.add(DateTime.utc_now(), -max_age_seconds, :second)

@@ -46,6 +46,19 @@ defmodule DropDoctorWeb.ReportController do
     |> send_resp(200, Report.spikes_csv(report))
   end
 
+  @doc "CSV download of the recorded download/upload speed tests."
+  def speeds_csv(conn, params) do
+    report = Report.build(limit: limit(params))
+
+    conn
+    |> put_resp_content_type("text/csv")
+    |> put_resp_header(
+      "content-disposition",
+      ~s(attachment; filename="#{Report.filename(:speeds, report.generated_at)}")
+    )
+    |> send_resp(200, Report.speeds_csv(report))
+  end
+
   # `?limit=N` lets a technician pull a wider window; clamped so a stray value
   # can't ask for an unbounded query.
   defp limit(%{"limit" => raw}) do

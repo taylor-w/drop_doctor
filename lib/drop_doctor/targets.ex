@@ -122,5 +122,35 @@ defmodule DropDoctor.Targets do
   def dns_target, do: safe_host(get_in(config(), [:dns])) || "cloudflare.com"
   def web_target, do: get_in(config(), [:web]) || "https://www.google.com/generate_204"
 
+  # --- speed test ---------------------------------------------------------
+
+  # The default bandwidth backend. Cloudflare's public speed endpoints need no
+  # account or API key, are anycast (so they auto-resolve to a nearby edge — the
+  # "pick a close server" behaviour a speed test wants, for free), and serve both
+  # a sized download (`/__down?bytes=N`) and an upload sink (`/__up`). Measuring
+  # real throughput is impossible without *some* remote peer; this is the one that
+  # works for a self-contained local binary with no infrastructure to host.
+  @default_speedtest_host "speed.cloudflare.com"
+
+  @doc """
+  The host the speed test exchanges bytes with. Honors `SPEEDTEST_HOST` then the
+  `:speedtest_host` config, else Cloudflare. The value is validated as a bare
+  host (no scheme/path/query), so an override can't inject a different URL — a
+  power user can point at a self-hosted Cloudflare-compatible backend, nothing
+  more. See [[public-repo-plan]] for the configurable-backend rationale.
+  """
+  def speedtest_host do
+    safe_host(blank_to_nil(System.get_env("SPEEDTEST_HOST"))) ||
+      safe_host(get_in(config(), [:speedtest_host])) ||
+      @default_speedtest_host
+  end
+
+  @doc "Download URL for `bytes` of payload from the configured speed-test host."
+  def speedtest_download_url(bytes) when is_integer(bytes) and bytes >= 0,
+    do: "https://#{speedtest_host()}/__down?bytes=#{bytes}"
+
+  @doc "Upload sink URL on the configured speed-test host."
+  def speedtest_upload_url, do: "https://#{speedtest_host()}/__up"
+
   defp config, do: Application.get_env(:drop_doctor, :targets, %{})
 end

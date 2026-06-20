@@ -10,6 +10,7 @@ defmodule DropDoctorWeb.DashboardLive do
 
   alias DropDoctor.{
     DeepDiagnostic,
+    Format,
     Measurements,
     Monitor,
     Net,
@@ -21,6 +22,12 @@ defmodule DropDoctorWeb.DashboardLive do
   # How many sweeps the expanded timeline shows at once. The window pans across
   # the full recorded history (drag), anchored `tl_offset` sweeps back from now.
   @tl_window 90
+
+  # Safety net for the browser-driven speed test: if no result comes back within
+  # this window (tab closed, hook hung, link saturated past any proxy timeout),
+  # a watchdog resumes monitoring anyway so background detection never stays
+  # silently paused. Comfortably longer than a full latency+down+up run (~20s).
+  @speedtest_timeout_ms 60_000
 
   @impl true
   def mount(_params, _session, socket) do
@@ -54,7 +61,14 @@ defmodule DropDoctorWeb.DashboardLive do
      |> assign(:stability, initial_stability())
      |> assign(:spike_events, Measurements.count_spike_events())
      |> assign(:deep, %{status: :idle, target: Targets.internet_target()})
-     |> assign(:mtr_available, DeepDiagnostic.available?())}
+     |> assign(:mtr_available, DeepDiagnostic.available?())
+     |> assign(:speed, %{status: :idle})
+     |> assign(:speed_history, Measurements.recent_speed_tests(20))
+     # Tracks whether *this* LiveView paused monitoring for an in-flight speed
+     # test, so resume is driven by what we actually paused — not by `@running`,
+     # which the user could change mid-test — and `terminate/2` can clean up.
+     |> assign(:monitoring_paused_for_speedtest, false)
+     |> assign(:speedtest_watchdog, nil)}
   end
 
   @impl true
@@ -75,6 +89,25 @@ defmodule DropDoctorWeb.DashboardLive do
   # Continuous stability stats for one segment (router/internet) arrive ~0.5/s.
   def handle_info({:stability, key, stats}, socket) do
     {:noreply, assign(socket, :stability, Map.put(socket.assigns.stability, key, stats))}
+  end
+
+  # The browser never reported a speed-test result within the timeout (tab
+  # closed, hook hung). Resume monitoring so detection isn't silently stuck, and
+  # surface the stall instead of leaving the UI on "Testing…" forever.
+  def handle_info(:speedtest_watchdog, socket) do
+    socket = resume_monitoring(socket)
+
+    socket =
+      if socket.assigns.speed.status == :running do
+        assign(socket, :speed, %{
+          status: :done,
+          result: %{ok?: false, error: "Speed test timed out — no result from the browser."}
+        })
+      else
+        socket
+      end
+
+    {:noreply, socket}
   end
 
   @impl true
@@ -151,6 +184,8 @@ defmodule DropDoctorWeb.DashboardLive do
      |> assign(:proof_key, nil)
      |> assign(:stability, initial_stability())
      |> assign(:deep, %{status: :idle, target: Targets.internet_target()})
+     |> assign(:speed, %{status: :idle})
+     |> assign(:speed_history, [])
      |> assign(:timeline_open, false)
      |> put_flash(:info, "Cleared #{deleted} recorded row(s) — starting fresh.")}
   end
@@ -162,6 +197,71 @@ defmodule DropDoctorWeb.DashboardLive do
       socket
       |> assign(:deep, %{status: :running, target: target})
       |> start_async(:deep, fn -> DeepDiagnostic.run(target) end)
+
+    {:noreply, socket}
+  end
+
+  # The speed test runs in the *browser* (a JS hook, `.SpeedTest`) so the byte
+  # transfer uses the native network stack — accurate on fast links the way
+  # speedtest.net is, and off the BEAM. This handler just kicks it off: saturating
+  # the link would make the resident spike samplers (and a 5s sweep landing
+  # mid-test) log a flood of self-inflicted "spikes", so we quiet monitoring for
+  # the duration, then tell the hook to run via a pushed event. We remember that
+  # *we* paused (not whether `@running` is set) so resume is exact, and arm a
+  # watchdog so a test that never reports back can't strand monitoring paused.
+  def handle_event("speedtest_start", _params, %{assigns: %{speed: %{status: :running}}} = socket) do
+    # Re-entrancy guard: a duplicate/stale client event (e.g. fired before the
+    # button's disabled attribute round-trips) must not re-pause or re-arm.
+    {:noreply, socket}
+  end
+
+  def handle_event("speedtest_start", _params, socket) do
+    paused? = socket.assigns.running
+
+    if paused? do
+      Monitor.pause()
+      SpikeMonitor.pause_all()
+    end
+
+    watchdog = Process.send_after(self(), :speedtest_watchdog, @speedtest_timeout_ms)
+
+    {:noreply,
+     socket
+     |> assign(:monitoring_paused_for_speedtest, paused?)
+     |> assign(:speedtest_watchdog, watchdog)
+     |> assign(:speed, %{status: :running, download_mbps: nil, upload_mbps: nil, phase: :latency})
+     |> push_event("speedtest:run", %{host: speedtest_server()})}
+  end
+
+  # Live ramp from the running test, so the numbers climb like a real speed test.
+  # Only overwrite a figure when this tick actually carries it, so the settled
+  # download number doesn't blank out while the upload phase reports.
+  def handle_event("speedtest:progress", params, socket) do
+    speed =
+      socket.assigns.speed
+      |> Map.put(:status, :running)
+      |> Map.put(:phase, atomize_phase(params["phase"]))
+      |> maybe_put_num(:download_mbps, params["download_mbps"])
+      |> maybe_put_num(:upload_mbps, params["upload_mbps"])
+
+    {:noreply, assign(socket, :speed, speed)}
+  end
+
+  # Final result from the hook: restore monitoring, persist the snapshot, show it.
+  def handle_event("speedtest:result", params, socket) do
+    socket = resume_monitoring(socket)
+    result = speed_result_from_params(params)
+
+    socket =
+      case Measurements.record_speed_test(result) do
+        {:ok, row} ->
+          socket
+          |> assign(:speed, %{status: :done, result: result})
+          |> assign(:speed_history, [row | socket.assigns.speed_history] |> Enum.take(20))
+
+        {:error, _reason} ->
+          assign(socket, :speed, %{status: :done, result: result})
+      end
 
     {:noreply, socket}
   end
@@ -181,6 +281,38 @@ defmodule DropDoctorWeb.DashboardLive do
        target: socket.assigns.deep.target,
        error: inspect(reason)
      })}
+  end
+
+  # Restore background monitoring after a speed test, but only if *we* paused it
+  # for this test (not merely because `@running` is set), so a test never
+  # un-pauses monitoring the user paused on purpose. Also disarms the watchdog.
+  defp resume_monitoring(socket) do
+    if socket.assigns.monitoring_paused_for_speedtest do
+      Monitor.resume()
+      SpikeMonitor.resume_all()
+    end
+
+    cancel_watchdog(socket.assigns.speedtest_watchdog)
+
+    socket
+    |> assign(:monitoring_paused_for_speedtest, false)
+    |> assign(:speedtest_watchdog, nil)
+  end
+
+  defp cancel_watchdog(nil), do: :ok
+  defp cancel_watchdog(ref), do: Process.cancel_timer(ref)
+
+  # If the tab closes or the LiveView crashes mid-test, the result handler never
+  # runs — so resume monitoring here too. Without this, a closed tab would leave
+  # the global Monitor/SpikeMonitor paused for every session until a restart.
+  @impl true
+  def terminate(_reason, socket) do
+    if socket.assigns[:monitoring_paused_for_speedtest] do
+      Monitor.resume()
+      SpikeMonitor.resume_all()
+    end
+
+    :ok
   end
 
   # --- render -------------------------------------------------------------
@@ -242,16 +374,43 @@ defmodule DropDoctorWeb.DashboardLive do
               Is it you, your router, or your ISP? Find out — with proof.
             </p>
           </div>
+          <%!-- The speed test is the labelled action; the monitoring controls
+               (pause / re-check) are compact icon-only buttons beside it. --%>
           <div class="flex items-center gap-2">
-            <button class="btn btn-sm tc-btn" phx-click="toggle_monitor">
-              <%= if @running do %>
-                <.lucide name="pause" class="size-4" /> Pause
+            <button
+              id="run-speedtest"
+              type="button"
+              class="btn btn-sm tc-btn tc-btn-primary"
+              phx-click="speedtest_start"
+              disabled={@speed.status == :running}
+              title="Measure download & upload in your browser"
+            >
+              <%= if @speed.status == :running do %>
+                <span class="loading loading-spinner loading-xs"></span> Testing…
               <% else %>
-                <.lucide name="play" class="size-4" /> Resume
+                <.lucide name="gauge" class="size-4" /> Speed test
               <% end %>
             </button>
-            <button class="btn btn-sm tc-btn tc-btn-primary" phx-click="sweep_now">
-              <.lucide name="refresh-cw" class="size-4" /> Test now
+            <%!-- Disabled while a speed test runs: the test deliberately pauses
+                 monitoring, so toggling it or firing a sweep mid-test would
+                 re-introduce the self-inflicted spike flood the pause prevents. --%>
+            <button
+              class="btn btn-sm btn-square tc-btn"
+              phx-click="toggle_monitor"
+              disabled={@speed.status == :running}
+              title={if @running, do: "Pause monitoring", else: "Resume monitoring"}
+              aria-label={if @running, do: "Pause monitoring", else: "Resume monitoring"}
+            >
+              <.lucide name={if @running, do: "pause", else: "play"} class="size-4" />
+            </button>
+            <button
+              class="btn btn-sm btn-square tc-btn"
+              phx-click="sweep_now"
+              disabled={@speed.status == :running}
+              title="Re-check the connection now"
+              aria-label="Re-check the connection now"
+            >
+              <.lucide name="refresh-cw" class="size-4" />
             </button>
           </div>
         </div>
@@ -272,25 +431,28 @@ defmodule DropDoctorWeb.DashboardLive do
     <!-- PIPELINE HERO — verdict banner with status wash + elevation -->
         <div class={"card overflow-hidden border border-base-300 tc-hero #{hero_tint(@verdict.status)}"}>
           <div class="card-body gap-5">
-            <!-- Verdict banner -->
-            <div class="space-y-2">
-              <div class="flex items-center gap-3 flex-wrap">
-                <span class={"tc-pill #{verdict_pill(@verdict.status)}"}>
-                  {String.upcase(to_string(@verdict.status))}
-                </span>
-                <span class="text-sm opacity-70">
-                  Likely cause: <span class="font-semibold">{culprit_label(@verdict.culprit)}</span>
-                </span>
-              </div>
-              <h2 class={"text-2xl sm:text-3xl font-bold #{status_text(@verdict.status)}"}>
-                {@verdict.headline}
-              </h2>
-              <p class="max-w-3xl text-sm opacity-80">{Map.get(@verdict, :detail)}</p>
-              <%= if Map.get(@verdict, :provisional?) and Map.get(@verdict, :samples, 0) > 0 do %>
-                <div class="text-xs opacity-50">
-                  Confirming — verdict based on {@verdict.samples} of 5 readings so far
+            <!-- Verdict banner (left) + speed test (top-right) -->
+            <div class="flex items-start justify-between gap-4 flex-col sm:flex-row">
+              <div class="space-y-2 min-w-0">
+                <div class="flex items-center gap-3 flex-wrap">
+                  <span class={"tc-pill #{verdict_pill(@verdict.status)}"}>
+                    {String.upcase(to_string(@verdict.status))}
+                  </span>
+                  <span class="text-sm opacity-70">
+                    Likely cause: <span class="font-semibold">{culprit_label(@verdict.culprit)}</span>
+                  </span>
                 </div>
-              <% end %>
+                <h2 class={"text-2xl sm:text-3xl font-bold #{status_text(@verdict.status)}"}>
+                  {@verdict.headline}
+                </h2>
+                <p class="max-w-3xl text-sm opacity-80">{Map.get(@verdict, :detail)}</p>
+                <%= if Map.get(@verdict, :provisional?) and Map.get(@verdict, :samples, 0) > 0 do %>
+                  <div class="text-xs opacity-50">
+                    Confirming — verdict based on {@verdict.samples} of 5 readings so far
+                  </div>
+                <% end %>
+              </div>
+              {render_speed_module(assigns)}
             </div>
             
     <!-- The animated path (+ the measurement it reveals, kept together so the
@@ -1117,6 +1279,13 @@ defmodule DropDoctorWeb.DashboardLive do
     do:
       ~S(<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>)
 
+  defp lucide_paths("gauge"),
+    do: ~S(<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>)
+
+  defp lucide_paths("arrow-down"), do: ~S(<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>)
+
+  defp lucide_paths("arrow-up"), do: ~S(<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>)
+
   defp lucide_paths(_), do: ""
 
   # --- deep diagnostic rendering ------------------------------------------
@@ -1160,6 +1329,235 @@ defmodule DropDoctorWeb.DashboardLive do
     </div>
     """
   end
+
+  # --- speed test (hero module + client-side measurement hook) -------------
+
+  # A compact, on-theme speed readout in the hero's top-right: the live/last
+  # download & upload figures and a latency/jitter subline. It's triggered by the
+  # "Speed test" button up in the header; the measurement itself runs in the
+  # browser via the colocated `.SpeedTest` hook below.
+  defp render_speed_module(assigns) do
+    ~H"""
+    <div
+      id="speedtest"
+      phx-hook=".SpeedTest"
+      data-host={speedtest_server()}
+      class="shrink-0 w-full sm:w-auto sm:min-w-[12rem] border-t sm:border-t-0 sm:border-l border-base-content/10 pt-3 sm:pt-0 sm:pl-5"
+    >
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-[11px] font-semibold uppercase tracking-wide opacity-50 flex items-center gap-1.5">
+          <.lucide name="gauge" class="size-3.5" /> Speed test
+        </span>
+        <%= if @speed_history != [] do %>
+          <a
+            href="/speeds.csv"
+            download
+            class="text-[10px] font-mono opacity-50 hover:opacity-100 inline-flex items-center gap-0.5 transition-opacity"
+            title="Download all speed tests as CSV"
+          >
+            <.lucide name="download" class="size-3" /> CSV
+          </a>
+        <% end %>
+      </div>
+
+      <div class="mt-2 flex items-end gap-6">
+        <div>
+          <div class="flex items-center gap-1 text-[10px] uppercase tracking-wide opacity-50">
+            <.lucide name="arrow-down" class="size-3 text-success" /> Down
+          </div>
+          <div class="font-mono text-2xl font-semibold tabular-nums leading-none text-success">
+            {speed_value(@speed, :download_mbps)}<span class="text-[10px] font-normal opacity-50 ml-1.5">Mbps</span>
+          </div>
+        </div>
+        <div>
+          <div class="flex items-center gap-1 text-[10px] uppercase tracking-wide opacity-50">
+            <.lucide name="arrow-up" class="size-3 text-info" /> Up
+          </div>
+          <div class="font-mono text-2xl font-semibold tabular-nums leading-none text-info">
+            {speed_value(@speed, :upload_mbps)}<span class="text-[10px] font-normal opacity-50 ml-1.5">Mbps</span>
+          </div>
+        </div>
+      </div>
+
+      <%!-- A finished test shows its latency/jitter; a failed one says so rather
+           than silently snapping back to dashes (indistinguishable from "never run"). --%>
+      <%= case @speed do %>
+        <% %{status: :done, result: %{ok?: false} = r} -> %>
+          <p class="mt-2 text-[10px] text-error/90 leading-tight">{speed_error_text(r)}</p>
+        <% %{status: :done, result: r} -> %>
+          <p class="mt-2 text-[10px] opacity-50 leading-tight">
+            Latency {fmt_ms(Map.get(r, :latency_ms))} · jitter {fmt_ms(Map.get(r, :jitter_ms))}
+          </p>
+        <% _ -> %>
+      <% end %>
+    </div>
+
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".SpeedTest">
+      export default {
+        mounted() {
+          this.busy = false
+          // The server kicks the test off (after pausing monitoring) by pushing
+          // this event; the measurement itself then runs here in the browser.
+          this.handleEvent("speedtest:run", (payload) => this.run(payload && payload.host))
+        },
+
+        async run(host) {
+          if (this.busy) return
+          this.busy = true
+          host = host || this.el.dataset.host || "speed.cloudflare.com"
+          const base = `https://${host}`
+          try {
+            const latency = await this.measureLatency(base)
+            const down = await this.measureRate(base, "download")
+            // Carry the settled download number through the upload phase so it
+            // doesn't blank out while upload measures.
+            this.pushEvent("speedtest:progress", {phase: "upload", download_mbps: down.mbps})
+            const up = await this.measureRate(base, "upload")
+            this.pushEvent("speedtest:result", {
+              // A complete result needs both directions measured; a zero in
+              // either means that half failed, so the test isn't "ok".
+              ok: down.mbps > 0 && up.mbps > 0,
+              download_mbps: down.mbps, upload_mbps: up.mbps,
+              latency_ms: latency.ms, jitter_ms: latency.jitter,
+              server: host, down_bytes: down.bytes, up_bytes: up.bytes, error: null
+            })
+          } catch (e) {
+            this.pushEvent("speedtest:result", {
+              ok: false, download_mbps: null, upload_mbps: null,
+              latency_ms: null, jitter_ms: null, server: host,
+              down_bytes: 0, up_bytes: 0, error: String((e && e.message) || e)
+            })
+          } finally {
+            this.busy = false
+          }
+        },
+
+        round1(n) { return Math.round(n * 10) / 10 },
+        sleep(ms) { return new Promise((r) => setTimeout(r, ms)) },
+
+        async measureLatency(base) {
+          const times = []
+          for (let i = 0; i < 6; i++) {
+            const t0 = performance.now()
+            try {
+              const r = await fetch(`${base}/__down?bytes=0`, {cache: "no-store"})
+              await r.arrayBuffer()
+              times.push(performance.now() - t0)
+            } catch (_) {}
+          }
+          times.shift() // drop the first: it pays connection + TLS setup
+          if (!times.length) return {ms: null, jitter: null}
+          const sorted = [...times].sort((a, b) => a - b)
+          const ms = sorted[Math.floor(sorted.length / 2)]
+          let jit = 0
+          for (let i = 1; i < times.length; i++) jit += Math.abs(times[i] - times[i - 1])
+          jit = times.length > 1 ? jit / (times.length - 1) : 0
+          return {ms: this.round1(ms), jitter: this.round1(jit)}
+        },
+
+        // Parallel-connection throughput with a warm-up discard over a fixed
+        // window — the same method speedtest.net / speed.cloudflare.com use.
+        async measureRate(base, direction) {
+          // Upload needs more concurrent streams than download to fill the pipe:
+          // a single HTTP/2 connection's send window caps one stream well below the
+          // line rate, so throughput climbs with parallelism (download saturates
+          // with fewer). Smaller upload chunks also shrink the bias from POSTs
+          // still in flight when the window closes (their bytes don't count).
+          // Tuned against a gigabit-symmetric line.
+          const CONNS = direction === "upload" ? 16 : 6
+          const WARMUP = 2000, WINDOW = 8000
+          const t0 = performance.now()
+          const warmupEnd = t0 + WARMUP
+          const end = warmupEnd + WINDOW
+          let bytes = 0
+          const ac = new AbortController()
+          const upBody = direction === "upload" ? this.randomBytes(4 * 1024 * 1024) : null
+
+          // Stream the climbing number to the dashboard while the test runs,
+          // but only when the rounded figure actually changes — otherwise a
+          // ~16s test pushes 50+ identical events, each re-rendering the hero.
+          let lastPushed = null
+          const ticker = setInterval(() => {
+            const now = performance.now()
+            if (now > warmupEnd) {
+              const secs = (now - warmupEnd) / 1000
+              if (secs > 0) {
+                const mbps = this.round1((bytes * 8) / secs / 1e6)
+                if (mbps !== lastPushed) {
+                  lastPushed = mbps
+                  this.pushEvent("speedtest:progress", {phase: direction, [`${direction}_mbps`]: mbps})
+                }
+              }
+            }
+          }, 300)
+
+          const worker = async () => {
+            while (performance.now() < end) {
+              try {
+                if (direction === "download") {
+                  const resp = await fetch(`${base}/__down?bytes=25000000`, {cache: "no-store", signal: ac.signal})
+                  const reader = resp.body.getReader()
+                  while (performance.now() < end) {
+                    const {done, value} = await reader.read()
+                    if (done) break
+                    if (performance.now() > warmupEnd) bytes += value.length
+                  }
+                  try { await reader.cancel() } catch (_) {}
+                } else {
+                  await fetch(`${base}/__up`, {method: "POST", body: upBody, cache: "no-store", signal: ac.signal})
+                  // Only count a POST that both started and *finished* inside the
+                  // measurement window. One still in flight when the window closed
+                  // would otherwise add its full size against the fixed denominator
+                  // below and inflate the reported upload rate.
+                  const now = performance.now()
+                  if (now > warmupEnd && now <= end) bytes += upBody.length
+                }
+              } catch (e) {
+                if (ac.signal.aborted) break
+                await this.sleep(150)
+              }
+            }
+          }
+
+          await Promise.all(Array.from({length: CONNS}, worker))
+          clearInterval(ticker)
+          ac.abort()
+          // Counted bytes all fall inside [warmupEnd, end] (a fixed WINDOW), so
+          // dividing by WINDOW gives the true throughput over the measured span.
+          return {mbps: this.round1((bytes * 8) / (WINDOW / 1000) / 1e6), bytes}
+        },
+
+        randomBytes(n) {
+          // The upload sink discards the body, so we don't need cryptographic
+          // randomness — only bytes a proxy can't deflate (compressible zeros
+          // would understate the upload). A cheap xorshift word-fill gives that
+          // without spending a CSPRNG pass on ~4MB before every upload phase.
+          const buf = new Uint8Array(n)
+          const words = new Uint32Array(buf.buffer)
+          let x = 0x9e3779b9
+          for (let i = 0; i < words.length; i++) {
+            x ^= x << 13
+            x ^= x >>> 17
+            x ^= x << 5
+            words[i] = x
+          }
+          return buf
+        }
+      }
+    </script>
+    """
+  end
+
+  # The number to show for a phase: the finished result, the live ramp while
+  # running, or a dash before any test.
+  defp speed_value(%{status: :done, result: r}, key), do: fmt_mbps(Map.get(r, key))
+  defp speed_value(%{status: :running} = s, key), do: fmt_mbps(Map.get(s, key))
+  defp speed_value(_speed, _key), do: "—"
+
+  # The message shown when a finished test didn't succeed. HEEx escapes it, so
+  # the client-supplied error string is safe to render.
+  defp speed_error_text(%{error: e}) when is_binary(e) and e != "", do: e
+  defp speed_error_text(_), do: "Speed test failed — couldn't measure throughput."
 
   defp display_host(%{host: h}) when h in ["???", nil], do: "(no response)"
   defp display_host(%{host: h}), do: h
@@ -1207,9 +1605,50 @@ defmodule DropDoctorWeb.DashboardLive do
   defp spike_count_badge(0), do: ""
   defp spike_count_badge(n), do: " (#{n})"
 
-  defp fmt_ms(nil), do: "—"
-  defp fmt_ms(n) when is_number(n), do: "#{Float.round(n / 1, 1)}ms"
-  defp fmt_ms(_), do: "—"
+  defp fmt_ms(n), do: Format.ms(n)
+  defp fmt_mbps(n), do: Format.mbps(n)
+
+  defp speedtest_server, do: Targets.speedtest_host()
+
+  # Build a persistable result map from the JS hook's payload (string-keyed JSON),
+  # mirroring the shape `Measurements.record_speed_test/1` expects. The timestamp
+  # and the server are stamped server-side (not taken from the client) so neither
+  # can be spoofed/skewed; the figures are bounds-checked by the changeset.
+  defp speed_result_from_params(p) do
+    %{
+      ok?: p["ok"] == true,
+      download_mbps: num(p["download_mbps"]),
+      upload_mbps: num(p["upload_mbps"]),
+      latency_ms: num(p["latency_ms"]),
+      jitter_ms: num(p["jitter_ms"]),
+      server: speedtest_server(),
+      down_bytes: as_int(p["down_bytes"]),
+      up_bytes: as_int(p["up_bytes"]),
+      measured_at: DateTime.utc_now(),
+      error: as_error(p["error"])
+    }
+  end
+
+  defp num(n) when is_number(n), do: Float.round(n / 1, 1)
+  defp num(_), do: nil
+
+  defp maybe_put_num(map, key, val) do
+    case num(val) do
+      nil -> map
+      n -> Map.put(map, key, n)
+    end
+  end
+
+  defp as_int(n) when is_integer(n), do: n
+  defp as_int(n) when is_float(n), do: trunc(n)
+  defp as_int(_), do: nil
+
+  defp as_error(e) when is_binary(e), do: String.slice(e, 0, 300)
+  defp as_error(_), do: nil
+
+  defp atomize_phase("download"), do: :download
+  defp atomize_phase("upload"), do: :upload
+  defp atomize_phase(_), do: :latency
 
   # --- pipeline helpers ---------------------------------------------------
 

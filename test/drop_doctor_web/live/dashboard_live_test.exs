@@ -21,13 +21,57 @@ defmodule DropDoctorWeb.DashboardLiveTest do
   test "mounts and renders the dashboard without error", %{conn: conn} do
     {:ok, _view, html} = live(conn, "/")
     assert html =~ "DropDoctor"
-    assert html =~ "Test now"
+    assert html =~ "Re-check the connection now"
     assert html =~ "Recent history"
     # The pipeline hero (You → Router → Your ISP → Internet) replaced the old
     # "path from you to the internet" ladder.
     assert html =~ "Your ISP"
     assert html =~ "Live stability"
     assert html =~ "Deep diagnostic"
+    assert html =~ "Speed test"
+  end
+
+  test "renders the speed test module with a run button", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/")
+    assert has_element?(view, "#run-speedtest")
+    assert has_element?(view, "#speedtest")
+  end
+
+  describe "speed test" do
+    test "starting the test pauses background monitoring and asks the browser to run", %{
+      conn: conn
+    } do
+      {:ok, view, _html} = live(conn, "/")
+
+      html = render_click(view, "speedtest_start")
+
+      assert html =~ "Testing"
+      # Monitoring is quieted so the saturation isn't logged as spikes.
+      refute DropDoctor.Monitor.running?()
+    end
+
+    test "a browser result is persisted, shown, and resumes monitoring", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/")
+
+      payload = %{
+        "ok" => true,
+        "download_mbps" => 912.3,
+        "upload_mbps" => 905.1,
+        "latency_ms" => 14.2,
+        "jitter_ms" => 1.1,
+        "server" => "speed.cloudflare.com",
+        "down_bytes" => 1_000_000,
+        "up_bytes" => 1_000_000,
+        "error" => nil
+      }
+
+      html = view |> element("#speedtest") |> render_hook("speedtest:result", payload)
+
+      assert html =~ "912.3"
+      assert html =~ "905.1"
+      assert DropDoctor.Measurements.count_speed_tests() == 1
+      assert DropDoctor.Monitor.running?()
+    end
   end
 
   test "pause button toggles the monitor and updates the control", %{conn: conn} do

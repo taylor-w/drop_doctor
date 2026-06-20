@@ -22,6 +22,7 @@ defmodule DropDoctorWeb.Router do
     get "/report", ReportController, :show
     get "/report.csv", ReportController, :csv
     get "/spikes.csv", ReportController, :spikes_csv
+    get "/speeds.csv", ReportController, :speeds_csv
   end
 
   # Other scopes may use custom stacks.
