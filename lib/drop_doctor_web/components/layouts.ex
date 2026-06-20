@@ -109,13 +109,19 @@ defmodule DropDoctorWeb.Layouts do
       aria-label="Stream-safe privacy"
       title="Stream-safe: hide IPs, hostnames & times so you can screen-share. Blur = hover to peek; lock = fully redact."
     >
-      <button type="button" data-privacy-set="off" title="Show all values">
+      <button
+        type="button"
+        data-privacy-set="off"
+        title="Show all values"
+        aria-label="Show all values"
+      >
         <.icon name="hero-eye-micro" class="size-4" />
       </button>
       <button
         type="button"
         data-privacy-set="blur"
         title="Stream-safe: blur IPs, hostnames & times (hover to peek)"
+        aria-label="Stream-safe: blur IPs, hostnames and times (hover to peek)"
       >
         <.icon name="hero-eye-slash-micro" class="size-4" />
       </button>
@@ -123,6 +129,7 @@ defmodule DropDoctorWeb.Layouts do
         type="button"
         data-privacy-set="strict"
         title="Strict: redact IPs, hostnames & times (no peek)"
+        aria-label="Strict: redact IPs, hostnames and times (no peek)"
       >
         <.icon name="hero-lock-closed-micro" class="size-4" />
       </button>
@@ -146,13 +153,19 @@ defmodule DropDoctorWeb.Layouts do
   """
   def theme_toggle(assigns) do
     ~H"""
-    <div class="card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full">
-      <div class="absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 transition-[left]" />
+    <div
+      class="card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full"
+      role="group"
+      aria-label="Color theme"
+    >
+      <div class="absolute left-0 w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 translate-x-0 [[data-theme=light]_&]:translate-x-full [[data-theme=dark]_&]:translate-x-[200%] transition-transform" />
 
       <button
         class="flex p-2 cursor-pointer w-1/3"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="system"
+        aria-label="Match system theme"
+        title="Match system theme"
       >
         <.icon name="hero-computer-desktop-micro" class="size-4 opacity-75 hover:opacity-100" />
       </button>
@@ -161,6 +174,8 @@ defmodule DropDoctorWeb.Layouts do
         class="flex p-2 cursor-pointer w-1/3"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="light"
+        aria-label="Light theme"
+        title="Light theme"
       >
         <.icon name="hero-sun-micro" class="size-4 opacity-75 hover:opacity-100" />
       </button>
@@ -169,6 +184,8 @@ defmodule DropDoctorWeb.Layouts do
         class="flex p-2 cursor-pointer w-1/3"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="dark"
+        aria-label="Dark theme"
+        title="Dark theme"
       >
         <.icon name="hero-moon-micro" class="size-4 opacity-75 hover:opacity-100" />
       </button>

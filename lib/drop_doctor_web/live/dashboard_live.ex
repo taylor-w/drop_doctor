@@ -590,6 +590,7 @@ defmodule DropDoctorWeb.DashboardLive do
                   class="opacity-50 hover:opacity-100 transition-opacity"
                   phx-click="open_timeline"
                   title="Expand the timeline — router vs. ISP, side by side"
+                  aria-label="Expand the timeline — router vs. ISP, side by side"
                 >
                   <.lucide name="maximize-2" class="size-3.5" />
                 </button>
@@ -763,6 +764,7 @@ defmodule DropDoctorWeb.DashboardLive do
                 class="opacity-60 hover:opacity-100"
                 phx-click="close_timeline"
                 title="Close (Esc)"
+                aria-label="Close timeline (Esc)"
               >
                 <.lucide name="x" class="size-5" />
               </button>
@@ -1379,15 +1381,12 @@ defmodule DropDoctorWeb.DashboardLive do
         </div>
       </div>
 
-      <%!-- A finished test shows its latency/jitter; a failed one says so rather
-           than silently snapping back to dashes (indistinguishable from "never run"). --%>
+      <%!-- A failed test says so rather than silently snapping back to dashes
+           (indistinguishable from "never run"); a successful one just shows the
+           down/up numbers above — no latency/jitter subline, kept clean. --%>
       <%= case @speed do %>
         <% %{status: :done, result: %{ok?: false} = r} -> %>
           <p class="mt-2 text-[10px] text-error/90 leading-tight">{speed_error_text(r)}</p>
-        <% %{status: :done, result: r} -> %>
-          <p class="mt-2 text-[10px] opacity-50 leading-tight">
-            Latency {fmt_ms(Map.get(r, :latency_ms))} · jitter {fmt_ms(Map.get(r, :jitter_ms))}
-          </p>
         <% _ -> %>
       <% end %>
     </div>

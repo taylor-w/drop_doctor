@@ -22,7 +22,7 @@ config :drop_doctor, DropDoctorWeb.Endpoint,
   debug_errors: true,
   secret_key_base: "5/X9DIxQz5ysqh+4fQPVzZglIKyqzUMYN1iVaK6Pv9/E43uOmPzCzUCOyDB1iI35",
   watchers: [
-    esbuild: {Esbuild, :install_and_run, [:drop_doctor, ~w(--sourcemap=inline --watch)]},
+    esbuild: {Esbuild, :install_and_run, [:drop_doctor, ~w(--sourcemap=linked --watch)]},
     tailwind: {Tailwind, :install_and_run, [:drop_doctor, ~w(--watch)]}
   ]
 
