@@ -119,16 +119,6 @@ dashboard's **Save proof for your ISP** card gives you:
 
 ---
 
-## Roadmap
-
-- ✅ **Exportable report** (PDF/CSV) to hand to your ISP.
-- ✅ **Packaged release** — a single double-click binary, no terminal needed.
-- ✅ **In-browser speed test** — download/upload throughput, saved as proof.
-- ⬜ **Latency/loss charts** over selectable time windows.
-- ⬜ **Configurable thresholds & targets** from the UI (no config-file edits).
-
----
-
 ## For developers
 
 - **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** — run from source, simulate
