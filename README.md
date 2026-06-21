@@ -61,7 +61,7 @@ the wider internet:
 | Layer | What it checks | A problem here means |
 |-------|----------------|----------------------|
 | **Your router / local network** | Reaching your gateway | Your Wi-Fi, cable, network card, or router — **your side** |
-| **The open internet** | Reaching a raw IP (`1.1.1.1`, no DNS) | The link past your equipment — **usually your ISP** |
+| **The open internet** | Reaching raw IPs directly, no DNS | The link past your equipment — **usually your ISP** |
 | **DNS** | Looking up a website name | Name-lookup issues — often fixed by switching DNS |
 | **Loading a real website** | An actual page request | Bandwidth saturation or a slow destination |
 
@@ -90,7 +90,15 @@ When the verdict points at your ISP, **Run deep diagnostic** traces *every hop*
 out to the internet and shows exactly where latency or loss starts — with your
 ISP's own routers named in the path. It's smart about *phantom loss* (a middle
 router that looks lossy but isn't actually dropping your traffic), so it won't
-cry wolf. Takes ~15s. (Available on Linux, macOS, and WSL.)
+cry wolf. Takes ~15s. On Windows it uses the built-in `tracert`; on Linux, macOS,
+and WSL it uses `mtr` (install it if your system doesn't already have it).
+
+### Measure your real speed
+
+Run a **speed test** straight from the dashboard. The download and upload test
+runs in your browser, so the numbers reflect what your machine actually gets —
+not a server-side estimate. Each run is saved with a timestamp, building a record
+of the throughput actually delivered to set against the tier your ISP sells you.
 
 ### Save proof for your ISP
 
@@ -105,6 +113,9 @@ dashboard's **Save proof for your ISP** card gives you:
 - **A spike log (CSV)** — every brief latency spike and packet-loss burst caught
   by continuous sampling, each timestamped — proof of the *intermittent* problems
   an "average" hides. The printable report includes a summary of these too.
+- **A speed-test log (CSV)** — every download/upload run, timestamped, so you can
+  show the delivered speed against the tier you pay for. These appear in the
+  printable report too.
 
 ---
 
@@ -112,6 +123,7 @@ dashboard's **Save proof for your ISP** card gives you:
 
 - ✅ **Exportable report** (PDF/CSV) to hand to your ISP.
 - ✅ **Packaged release** — a single double-click binary, no terminal needed.
+- ✅ **In-browser speed test** — download/upload throughput, saved as proof.
 - ⬜ **Latency/loss charts** over selectable time windows.
 - ⬜ **Configurable thresholds & targets** from the UI (no config-file edits).
 

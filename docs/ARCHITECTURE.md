@@ -16,24 +16,32 @@ lib/drop_doctor/
   probe.ex               # Probe behaviour + registry (probes are injectable/testable)
   probes/
     ping.ex              # ICMP via system `ping`, parses Linux/macOS/Windows output
+    reach.ex             # router/open-internet reachability: multi-anchor ICMP→TCP fallback
+    tcp_stream.ex        # continuous TCP-connect sampler for hosts that drop ICMP
     dns.ex               # resolution timing via OTP's built-in resolver
     http.ex              # real HTTP fetch timing via OTP's :httpc (no extra deps)
-    mtr.ex               # per-hop trace via `mtr --json` (the deep diagnostic probe)
+    mtr.ex               # per-hop trace via `mtr --json` (deep diagnostic on Linux/macOS/WSL)
+    tracert.ex           # per-hop trace via Windows' built-in `tracert` (same hop shape as mtr)
   sweeper.ex             # runs one ladder pass concurrently w/ a bounded deadline
   aggregate.ex           # median-smooths a rolling window (debounce / anti-false-alarm)
   stability.ex           # pure stats: jitter (IPDV), p95/p99, spike + brief-loss counts
-  spike_monitor.ex       # continuous high-rate ping sampler — catches spikes between sweeps
+  spike_analysis.ex      # classifies a sample stream into spike / brief-loss events
+  spike_monitor.ex       # continuous high-rate sampler — catches spikes between sweeps
   diagnosis.ex           # the brain: turns measurements into a plain-English verdict
-  path_report.ex         # interprets an mtr trace (zones, phantom-loss, culprit hop)
-  deep_diagnostic.ex     # orchestrates the on-demand per-hop trace + interpretation
+  path_report.ex         # interprets a hop trace (zones, phantom-loss, culprit hop)
+  deep_diagnostic.ex     # picks the OS tracer (mtr/tracert) + orchestrates the per-hop trace
   monitor.ex             # supervised GenServer: paces sweeps off-loop, persists, prunes, broadcasts
   measurements.ex        # history storage/queries + retention pruning (SQLite)
   measurements/sweep.ex  # the stored sweep record
   measurements/spike_event.ex # a logged latency-spike / loss event (ISP proof)
-  report.ex              # builds the exportable ISP report (printable HTML + CSV + spike log)
+  measurements/speed_test.ex  # a stored browser-measured download/upload throughput run
+  report.ex              # builds the exportable ISP report (printable HTML + CSV + spike/speed logs)
+  format.ex              # shared human-readable formatting helpers
+  themes.ex              # selectable colorways + light/dark palette definitions
+  launcher.ex            # opens the browser to the dashboard on packaged-binary startup
 
 lib/drop_doctor_web/live/dashboard_live.ex            # the single-screen LiveView dashboard
-lib/drop_doctor_web/controllers/report_controller.ex  # serves /report (HTML) and /report.csv
+lib/drop_doctor_web/controllers/report_controller.ex  # serves /report (HTML) and the CSV exports
 ```
 
 ## Design properties worth knowing
