@@ -39,7 +39,7 @@ defmodule DropDoctorWeb.Layouts do
       <div class="flex-1"></div>
       <div class="flex-none flex items-center gap-2">
         <.view_controls />
-        <.theme_toggle />
+        <.theme_menu />
       </div>
     </header>
 
@@ -147,49 +147,136 @@ defmodule DropDoctorWeb.Layouts do
   end
 
   @doc """
-  Provides dark vs light theme toggle based on themes defined in app.css.
+  The color-theme picker: a native `<details>` disclosure with two independent
+  controls — a system / light / dark **mode** segment and a grid of **colorways**
+  (incl. the brand "Default"). Mode and colorway compose: pick Winter, then Dark,
+  and the page becomes `winter-dark`.
 
-  See <head> in root.html.heex which applies the theme before page load.
+  Mode buttons dispatch `phx:set-theme`; colorway swatches dispatch
+  `phx:set-colorway`. Both are handled by the inline script in root.html.heex,
+  which persists each to its own `localStorage` key and resolves the combined
+  `<html data-theme>` before paint (never re-rendered by LiveView, so it can't
+  flicker on a sweep update). The exported report reads the same keys and follows
+  along. The mode pill and the active-swatch ring are pure CSS off the
+  `data-mode` / `data-colorway` attributes the script mirrors onto `<html>`.
   """
-  def theme_toggle(assigns) do
+  def theme_menu(assigns) do
+    assigns = assign(assigns, :colorways, DropDoctor.Themes.colorways())
+
     ~H"""
-    <div
-      class="card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full"
-      role="group"
-      aria-label="Color theme"
-    >
-      <div class="absolute left-0 w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 translate-x-0 [[data-theme=light]_&]:translate-x-full [[data-theme=dark]_&]:translate-x-[200%] transition-transform" />
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="system"
-        aria-label="Match system theme"
-        title="Match system theme"
+    <details class="dropdown dropdown-end" id="theme-menu">
+      <summary
+        class="tc-seg-btn list-none [&::-webkit-details-marker]:hidden"
+        aria-label="Choose a color theme"
+        title="Choose a color theme"
       >
-        <.icon name="hero-computer-desktop-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
+        <%!-- Lucide "palette" (inlined; the app ships Heroicons, no Lucide dep). --%>
+        <svg
+          class="size-4"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z" />
+          <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" />
+          <circle cx="17.5" cy="10.5" r=".5" fill="currentColor" />
+          <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" />
+          <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" />
+        </svg>
+      </summary>
 
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="light"
-        aria-label="Light theme"
-        title="Light theme"
-      >
-        <.icon name="hero-sun-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
+      <div class="dropdown-content tc-panel z-50 mt-2 w-72 rounded-box border border-base-300 bg-base-200 p-3 shadow-lg">
+        <p class="mb-2 text-xs font-semibold uppercase tracking-wide opacity-60">Mode</p>
 
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="dark"
-        aria-label="Dark theme"
-        title="Dark theme"
-      >
-        <.icon name="hero-moon-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
-    </div>
+        <div
+          class="card relative flex w-full flex-row items-center rounded-full border-2 border-base-300 bg-base-300"
+          role="group"
+          aria-label="Light or dark mode"
+        >
+          <div class="tc-mode-pill absolute left-0 h-full w-1/3 translate-x-0 rounded-full border-1 border-base-200 bg-base-100 brightness-200 transition-transform [[data-mode=light]_&]:translate-x-full [[data-mode=dark]_&]:translate-x-[200%]" />
+          <button
+            type="button"
+            class="flex w-1/3 cursor-pointer justify-center p-2"
+            phx-click={pick("phx:set-theme")}
+            data-phx-theme="system"
+            aria-label="Match system mode"
+            title="Match system mode"
+          >
+            <.icon name="hero-computer-desktop-micro" class="size-4 opacity-75 hover:opacity-100" />
+          </button>
+          <button
+            type="button"
+            class="flex w-1/3 cursor-pointer justify-center p-2"
+            phx-click={pick("phx:set-theme")}
+            data-phx-theme="light"
+            aria-label="Light mode"
+            title="Light mode"
+          >
+            <.icon name="hero-sun-micro" class="size-4 opacity-75 hover:opacity-100" />
+          </button>
+          <button
+            type="button"
+            class="flex w-1/3 cursor-pointer justify-center p-2"
+            phx-click={pick("phx:set-theme")}
+            data-phx-theme="dark"
+            aria-label="Dark mode"
+            title="Dark mode"
+          >
+            <.icon name="hero-moon-micro" class="size-4 opacity-75 hover:opacity-100" />
+          </button>
+        </div>
+
+        <p class="mt-3 mb-2 text-xs font-semibold uppercase tracking-wide opacity-60">Colorway</p>
+        <div class="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            class="tc-swatch"
+            phx-click={pick("phx:set-colorway")}
+            data-colorway="default"
+            aria-label="Default colorway"
+            title="Default"
+          >
+            <span class="tc-swatch-colors" data-theme="light" aria-hidden="true">
+              <span class="bg-base-100"></span>
+              <span class="bg-primary"></span>
+              <span class="bg-secondary"></span>
+              <span class="bg-accent"></span>
+            </span>
+            <span class="tc-swatch-label">Default</span>
+          </button>
+          <button
+            :for={cw <- @colorways}
+            type="button"
+            class="tc-swatch"
+            phx-click={pick("phx:set-colorway")}
+            data-colorway={cw.name}
+            aria-label={cw.label <> " colorway"}
+            title={cw.label}
+          >
+            <span class="tc-swatch-colors" data-theme={cw.name <> "-light"} aria-hidden="true">
+              <span class="bg-base-100"></span>
+              <span class="bg-primary"></span>
+              <span class="bg-secondary"></span>
+              <span class="bg-accent"></span>
+            </span>
+            <span class="tc-swatch-label">{cw.label}</span>
+          </button>
+        </div>
+      </div>
+    </details>
     """
+  end
+
+  # Dispatch the clicked option's set-theme/set-colorway event (the handler reads
+  # the bound button's data-* attribute) and collapse the picker.
+  defp pick(event, js \\ %JS{}) do
+    js
+    |> JS.dispatch(event)
+    |> JS.remove_attribute("open", to: "#theme-menu")
   end
 end

@@ -13,6 +13,10 @@
 /* daisyUI Tailwind Plugin. You can update this file by fetching the latest version with:
    curl -sLO https://github.com/saadeghi/daisyui/releases/latest/download/daisyui.js
    Make sure to look at the daisyUI changelog: https://daisyui.com/docs/changelog/ */
+/* We ship no daisyUI built-in themes. The brand light/dark are defined just
+   below; the selectable colorways are authored further down as light/dark pairs
+   (see "Colorway palettes"). Keeping built-ins off keeps the CSS lean and gives
+   us full control over every palette's contrast. */
 @plugin "../vendor/daisyui" {
   themes: false;
 }
@@ -89,6 +93,376 @@
   --border: 1.5px;
   --depth: 1;
   --noise: 0;
+}
+
+/* === Colorway palettes ====================================================
+   Each selectable colorway (DropDoctor.Themes) is a light/dark PAIR, applied as
+   data-theme="<name>-<mode>"; the brand light/dark above are the "default"
+   colorway. One recipe drives them: a per-colorway primary/secondary/accent over
+   a near-white (light) or near-black (dark) base carrying a faint hue tint, so
+   base-content vs base-100 always has strong contrast and a11y holds on any
+   theme. Health semantics and the shape tokens are constant across colorways —
+   set once here — so green=healthy never drifts and the shape language stays
+   put. Keep names in sync with DropDoctor.Themes (a test enforces it). */
+[data-theme$="-light"],
+[data-theme$="-dark"] {
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.21875rem;
+  --size-field: 0.21875rem;
+  --border: 1.5px;
+  --depth: 1;
+  --noise: 0;
+}
+[data-theme$="-light"] {
+  --color-info: oklch(62% 0.16 235);
+  --color-info-content: oklch(98% 0.013 235);
+  --color-success: oklch(62% 0.15 150);
+  --color-success-content: oklch(98% 0.014 150);
+  --color-warning: oklch(70% 0.16 75);
+  --color-warning-content: oklch(98% 0.022 95);
+  --color-error: oklch(58% 0.22 25);
+  --color-error-content: oklch(98% 0.015 20);
+}
+[data-theme$="-dark"] {
+  --color-info: oklch(70% 0.15 235);
+  --color-info-content: oklch(20% 0.04 235);
+  --color-success: oklch(70% 0.14 150);
+  --color-success-content: oklch(20% 0.04 150);
+  --color-warning: oklch(76% 0.15 75);
+  --color-warning-content: oklch(24% 0.05 80);
+  --color-error: oklch(68% 0.2 25);
+  --color-error-content: oklch(20% 0.04 20);
+}
+
+/* Winter — cool blue */
+[data-theme="winter-light"] {
+  color-scheme: light;
+  --color-base-100: oklch(98.5% 0.008 245);
+  --color-base-200: oklch(96.5% 0.01 245);
+  --color-base-300: oklch(92% 0.014 245);
+  --color-base-content: oklch(26% 0.035 245);
+  --color-primary: oklch(57% 0.14 245);
+  --color-primary-content: oklch(98% 0.012 245);
+  --color-secondary: oklch(64% 0.1 220);
+  --color-secondary-content: oklch(98% 0.012 220);
+  --color-accent: oklch(64% 0.12 195);
+  --color-accent-content: oklch(98% 0.012 195);
+  --color-neutral: oklch(30% 0.03 245);
+  --color-neutral-content: oklch(97% 0.01 245);
+}
+[data-theme="winter-dark"] {
+  color-scheme: dark;
+  --color-base-100: oklch(26% 0.022 245);
+  --color-base-200: oklch(22% 0.02 245);
+  --color-base-300: oklch(18.5% 0.018 245);
+  --color-base-content: oklch(94% 0.02 245);
+  --color-primary: oklch(72% 0.15 245);
+  --color-primary-content: oklch(20% 0.04 245);
+  --color-secondary: oklch(74% 0.1 220);
+  --color-secondary-content: oklch(20% 0.04 220);
+  --color-accent: oklch(76% 0.12 195);
+  --color-accent-content: oklch(20% 0.04 195);
+  --color-neutral: oklch(38% 0.03 245);
+  --color-neutral-content: oklch(96% 0.01 245);
+}
+
+/* Aqua — teal / cyan */
+[data-theme="aqua-light"] {
+  color-scheme: light;
+  --color-base-100: oklch(98.5% 0.009 195);
+  --color-base-200: oklch(96.5% 0.012 195);
+  --color-base-300: oklch(92% 0.016 195);
+  --color-base-content: oklch(27% 0.04 200);
+  --color-primary: oklch(58% 0.12 195);
+  --color-primary-content: oklch(98% 0.012 195);
+  --color-secondary: oklch(64% 0.11 210);
+  --color-secondary-content: oklch(98% 0.012 210);
+  --color-accent: oklch(66% 0.13 175);
+  --color-accent-content: oklch(98% 0.012 175);
+  --color-neutral: oklch(30% 0.03 200);
+  --color-neutral-content: oklch(97% 0.01 200);
+}
+[data-theme="aqua-dark"] {
+  color-scheme: dark;
+  --color-base-100: oklch(25% 0.025 200);
+  --color-base-200: oklch(21% 0.022 200);
+  --color-base-300: oklch(17.5% 0.02 200);
+  --color-base-content: oklch(93% 0.025 195);
+  --color-primary: oklch(74% 0.14 195);
+  --color-primary-content: oklch(20% 0.04 195);
+  --color-secondary: oklch(74% 0.12 210);
+  --color-secondary-content: oklch(20% 0.04 210);
+  --color-accent: oklch(78% 0.14 175);
+  --color-accent-content: oklch(20% 0.04 175);
+  --color-neutral: oklch(38% 0.03 200);
+  --color-neutral-content: oklch(96% 0.01 200);
+}
+
+/* Forest — natural green */
+[data-theme="forest-light"] {
+  color-scheme: light;
+  --color-base-100: oklch(98.5% 0.01 150);
+  --color-base-200: oklch(96% 0.014 150);
+  --color-base-300: oklch(91.5% 0.018 150);
+  --color-base-content: oklch(26% 0.04 150);
+  --color-primary: oklch(52% 0.13 150);
+  --color-primary-content: oklch(98% 0.013 150);
+  --color-secondary: oklch(62% 0.11 128);
+  --color-secondary-content: oklch(98% 0.013 128);
+  --color-accent: oklch(70% 0.15 90);
+  --color-accent-content: oklch(24% 0.05 90);
+  --color-neutral: oklch(30% 0.03 150);
+  --color-neutral-content: oklch(97% 0.01 150);
+}
+[data-theme="forest-dark"] {
+  color-scheme: dark;
+  --color-base-100: oklch(25% 0.025 150);
+  --color-base-200: oklch(21% 0.022 150);
+  --color-base-300: oklch(17.5% 0.02 150);
+  --color-base-content: oklch(93% 0.025 150);
+  --color-primary: oklch(72% 0.15 150);
+  --color-primary-content: oklch(20% 0.04 150);
+  --color-secondary: oklch(74% 0.12 128);
+  --color-secondary-content: oklch(20% 0.04 128);
+  --color-accent: oklch(80% 0.15 90);
+  --color-accent-content: oklch(24% 0.05 90);
+  --color-neutral: oklch(38% 0.03 150);
+  --color-neutral-content: oklch(96% 0.01 150);
+}
+
+/* Matrix — phosphor green on black; the hacker vibe */
+[data-theme="matrix-light"] {
+  color-scheme: light;
+  --color-base-100: oklch(97% 0.02 150);
+  --color-base-200: oklch(94.5% 0.025 150);
+  --color-base-300: oklch(89% 0.03 150);
+  --color-base-content: oklch(27% 0.08 150);
+  --color-primary: oklch(50% 0.19 142);
+  --color-primary-content: oklch(98% 0.02 142);
+  --color-secondary: oklch(58% 0.14 155);
+  --color-secondary-content: oklch(98% 0.02 155);
+  --color-accent: oklch(60% 0.16 120);
+  --color-accent-content: oklch(98% 0.02 120);
+  --color-neutral: oklch(30% 0.06 150);
+  --color-neutral-content: oklch(96% 0.02 150);
+}
+[data-theme="matrix-dark"] {
+  color-scheme: dark;
+  --color-base-100: oklch(16% 0.03 150);
+  --color-base-200: oklch(13% 0.028 150);
+  --color-base-300: oklch(10.5% 0.026 150);
+  --color-base-content: oklch(90% 0.19 145);
+  --color-primary: oklch(84% 0.24 142);
+  --color-primary-content: oklch(18% 0.06 145);
+  --color-secondary: oklch(78% 0.17 155);
+  --color-secondary-content: oklch(18% 0.06 155);
+  --color-accent: oklch(86% 0.2 125);
+  --color-accent-content: oklch(18% 0.06 125);
+  --color-neutral: oklch(32% 0.05 150);
+  --color-neutral-content: oklch(92% 0.12 145);
+}
+
+/* Mocha — warm coffee / sepia */
+[data-theme="mocha-light"] {
+  color-scheme: light;
+  --color-base-100: oklch(98% 0.012 75);
+  --color-base-200: oklch(95.5% 0.016 70);
+  --color-base-300: oklch(90.5% 0.022 65);
+  --color-base-content: oklch(27% 0.03 60);
+  --color-primary: oklch(52% 0.08 65);
+  --color-primary-content: oklch(98% 0.012 75);
+  --color-secondary: oklch(60% 0.06 45);
+  --color-secondary-content: oklch(98% 0.012 45);
+  --color-accent: oklch(64% 0.09 30);
+  --color-accent-content: oklch(98% 0.012 30);
+  --color-neutral: oklch(32% 0.03 60);
+  --color-neutral-content: oklch(96% 0.012 75);
+}
+[data-theme="mocha-dark"] {
+  color-scheme: dark;
+  --color-base-100: oklch(25% 0.02 60);
+  --color-base-200: oklch(21% 0.018 60);
+  --color-base-300: oklch(17.5% 0.016 60);
+  --color-base-content: oklch(93% 0.02 70);
+  --color-primary: oklch(74% 0.08 65);
+  --color-primary-content: oklch(22% 0.04 60);
+  --color-secondary: oklch(72% 0.06 45);
+  --color-secondary-content: oklch(22% 0.04 45);
+  --color-accent: oklch(76% 0.09 30);
+  --color-accent-content: oklch(22% 0.04 30);
+  --color-neutral: oklch(40% 0.025 60);
+  --color-neutral-content: oklch(95% 0.012 70);
+}
+
+/* Sunset — orange into pink */
+[data-theme="sunset-light"] {
+  color-scheme: light;
+  --color-base-100: oklch(98.5% 0.012 60);
+  --color-base-200: oklch(96.5% 0.016 50);
+  --color-base-300: oklch(92% 0.022 45);
+  --color-base-content: oklch(27% 0.04 40);
+  --color-primary: oklch(55% 0.17 45);
+  --color-primary-content: oklch(98% 0.013 60);
+  --color-secondary: oklch(66% 0.14 28);
+  --color-secondary-content: oklch(98% 0.013 28);
+  --color-accent: oklch(62% 0.16 350);
+  --color-accent-content: oklch(98% 0.013 350);
+  --color-neutral: oklch(31% 0.03 40);
+  --color-neutral-content: oklch(97% 0.012 60);
+}
+[data-theme="sunset-dark"] {
+  color-scheme: dark;
+  --color-base-100: oklch(25% 0.022 40);
+  --color-base-200: oklch(21% 0.02 40);
+  --color-base-300: oklch(17.5% 0.018 40);
+  --color-base-content: oklch(94% 0.02 55);
+  --color-primary: oklch(75% 0.16 45);
+  --color-primary-content: oklch(22% 0.05 40);
+  --color-secondary: oklch(76% 0.14 28);
+  --color-secondary-content: oklch(22% 0.05 28);
+  --color-accent: oklch(74% 0.16 350);
+  --color-accent-content: oklch(20% 0.04 350);
+  --color-neutral: oklch(39% 0.03 40);
+  --color-neutral-content: oklch(95% 0.012 55);
+}
+
+/* Rose — red into pink */
+[data-theme="rose-light"] {
+  color-scheme: light;
+  --color-base-100: oklch(98.5% 0.01 20);
+  --color-base-200: oklch(96.5% 0.014 18);
+  --color-base-300: oklch(92% 0.02 15);
+  --color-base-content: oklch(26% 0.04 18);
+  --color-primary: oklch(56% 0.19 18);
+  --color-primary-content: oklch(98% 0.013 20);
+  --color-secondary: oklch(60% 0.15 5);
+  --color-secondary-content: oklch(98% 0.013 5);
+  --color-accent: oklch(64% 0.13 350);
+  --color-accent-content: oklch(98% 0.013 350);
+  --color-neutral: oklch(30% 0.04 18);
+  --color-neutral-content: oklch(97% 0.012 20);
+}
+[data-theme="rose-dark"] {
+  color-scheme: dark;
+  --color-base-100: oklch(25% 0.025 18);
+  --color-base-200: oklch(21% 0.022 18);
+  --color-base-300: oklch(17.5% 0.02 15);
+  --color-base-content: oklch(94% 0.025 20);
+  --color-primary: oklch(70% 0.19 18);
+  --color-primary-content: oklch(20% 0.05 18);
+  --color-secondary: oklch(72% 0.15 5);
+  --color-secondary-content: oklch(20% 0.05 5);
+  --color-accent: oklch(76% 0.13 350);
+  --color-accent-content: oklch(20% 0.04 350);
+  --color-neutral: oklch(38% 0.035 18);
+  --color-neutral-content: oklch(96% 0.012 20);
+}
+
+/* Candy — playful pink */
+[data-theme="candy-light"] {
+  color-scheme: light;
+  --color-base-100: oklch(99% 0.008 350);
+  --color-base-200: oklch(96.5% 0.014 350);
+  --color-base-300: oklch(92% 0.02 345);
+  --color-base-content: oklch(27% 0.04 345);
+  --color-primary: oklch(55% 0.17 350);
+  --color-primary-content: oklch(98% 0.013 350);
+  --color-secondary: oklch(66% 0.13 330);
+  --color-secondary-content: oklch(98% 0.013 330);
+  --color-accent: oklch(66% 0.12 200);
+  --color-accent-content: oklch(98% 0.013 200);
+  --color-neutral: oklch(31% 0.035 345);
+  --color-neutral-content: oklch(97% 0.012 350);
+}
+[data-theme="candy-dark"] {
+  color-scheme: dark;
+  --color-base-100: oklch(24% 0.025 345);
+  --color-base-200: oklch(20.5% 0.022 345);
+  --color-base-300: oklch(17% 0.02 345);
+  --color-base-content: oklch(94% 0.025 350);
+  --color-primary: oklch(76% 0.16 350);
+  --color-primary-content: oklch(22% 0.05 350);
+  --color-secondary: oklch(76% 0.13 330);
+  --color-secondary-content: oklch(22% 0.05 330);
+  --color-accent: oklch(78% 0.13 200);
+  --color-accent-content: oklch(20% 0.04 200);
+  --color-neutral: oklch(39% 0.035 345);
+  --color-neutral-content: oklch(96% 0.012 350);
+}
+
+/* Grape — purple */
+[data-theme="grape-light"] {
+  color-scheme: light;
+  --color-base-100: oklch(98.5% 0.01 300);
+  --color-base-200: oklch(96.5% 0.014 300);
+  --color-base-300: oklch(92% 0.02 300);
+  --color-base-content: oklch(26% 0.04 300);
+  --color-primary: oklch(54% 0.18 300);
+  --color-primary-content: oklch(98% 0.013 300);
+  --color-secondary: oklch(60% 0.15 282);
+  --color-secondary-content: oklch(98% 0.013 282);
+  --color-accent: oklch(64% 0.16 330);
+  --color-accent-content: oklch(98% 0.013 330);
+  --color-neutral: oklch(30% 0.04 300);
+  --color-neutral-content: oklch(97% 0.012 300);
+}
+[data-theme="grape-dark"] {
+  color-scheme: dark;
+  --color-base-100: oklch(24% 0.028 300);
+  --color-base-200: oklch(20.5% 0.025 300);
+  --color-base-300: oklch(17% 0.022 300);
+  --color-base-content: oklch(94% 0.025 300);
+  --color-primary: oklch(72% 0.18 300);
+  --color-primary-content: oklch(20% 0.05 300);
+  --color-secondary: oklch(74% 0.15 282);
+  --color-secondary-content: oklch(20% 0.05 282);
+  --color-accent: oklch(76% 0.17 330);
+  --color-accent-content: oklch(20% 0.04 330);
+  --color-neutral: oklch(38% 0.035 300);
+  --color-neutral-content: oklch(96% 0.012 300);
+}
+
+/* Cyberpunk — neon magenta + cyan (no more bright-yellow) */
+[data-theme="cyberpunk-light"] {
+  color-scheme: light;
+  --color-base-100: oklch(98% 0.015 330);
+  --color-base-200: oklch(95.5% 0.02 330);
+  --color-base-300: oklch(90% 0.03 320);
+  --color-base-content: oklch(26% 0.06 320);
+  --color-primary: oklch(58% 0.22 330);
+  --color-primary-content: oklch(98% 0.02 330);
+  --color-secondary: oklch(60% 0.17 300);
+  --color-secondary-content: oklch(98% 0.02 300);
+  --color-accent: oklch(68% 0.15 195);
+  --color-accent-content: oklch(20% 0.04 195);
+  --color-neutral: oklch(30% 0.05 320);
+  --color-neutral-content: oklch(97% 0.02 320);
+}
+[data-theme="cyberpunk-dark"] {
+  color-scheme: dark;
+  --color-base-100: oklch(18% 0.04 320);
+  --color-base-200: oklch(15% 0.038 320);
+  --color-base-300: oklch(12% 0.035 320);
+  --color-base-content: oklch(93% 0.04 320);
+  --color-primary: oklch(74% 0.28 330);
+  --color-primary-content: oklch(18% 0.06 330);
+  --color-secondary: oklch(72% 0.2 295);
+  --color-secondary-content: oklch(18% 0.05 295);
+  --color-accent: oklch(84% 0.18 195);
+  --color-accent-content: oklch(20% 0.05 195);
+  --color-neutral: oklch(38% 0.05 320);
+  --color-neutral-content: oklch(95% 0.02 320);
+}
+
+/* Light colorways use a bright accent, so its readable foreground is DARK text,
+   not the near-white the recipe sets per palette. Set once here (after the
+   palettes so it wins) — keeps `bg-accent` + `text-accent-content` legible
+   (WCAG-AA) if a component ever uses the accent pairing. Dark colorways already
+   pair their bright accent with dark content. */
+[data-theme$="-light"] {
+  --color-accent-content: oklch(22% 0.02 0);
 }
 
 /* Add variants based on LiveView classes */
@@ -453,6 +827,55 @@ body {
   }
 }
 
+/* --- Expanded timeline on a colorway --------------------------------------
+   light/dark above are tuned by name. Every *other* selectable palette
+   (data-theme present, but not our light/dark) gets the same crafted glass,
+   with the light-vs-dark split resolved by `light-dark()` against that palette's
+   own `color-scheme`. One block covers all present and future colorways — no
+   per-theme tuning, and the hand-tuned light/dark above are left untouched. */
+:root[data-theme]:not([data-theme="light"]):not([data-theme="dark"]) .tl-band {
+  fill-opacity: 0.3;
+}
+:root[data-theme]:not([data-theme="light"]):not([data-theme="dark"]) .tl-marker {
+  fill-opacity: 0.26;
+}
+:root[data-theme]:not([data-theme="light"]):not([data-theme="dark"]) .tl-grid {
+  color: color-mix(in oklab, var(--color-base-content) 32%, transparent);
+}
+:root[data-theme]:not([data-theme="light"]):not([data-theme="dark"]) .tl-router {
+  color: color-mix(in oklab, var(--color-base-content) 74%, transparent);
+}
+:root[data-theme]:not([data-theme="light"]):not([data-theme="dark"]) .tl-muted {
+  opacity: 0.78;
+}
+:root[data-theme]:not([data-theme="light"]):not([data-theme="dark"]) .tl-overlay {
+  background-color: light-dark(
+    color-mix(in oklab, var(--color-base-content) 16%, transparent),
+    rgb(0 0 0 / 0.62)
+  );
+  -webkit-backdrop-filter: blur(9px);
+  backdrop-filter: blur(9px);
+}
+:root[data-theme]:not([data-theme="light"]):not([data-theme="dark"]) .tl-modal {
+  background-color: light-dark(
+    color-mix(in oklab, var(--color-base-100) 78%, transparent),
+    color-mix(in oklab, var(--color-base-100) 93%, transparent)
+  );
+  border-color: light-dark(
+    color-mix(in oklab, var(--color-base-content) 9%, transparent),
+    color-mix(in oklab, var(--color-base-content) 14%, transparent)
+  );
+  -webkit-backdrop-filter: blur(20px) saturate(119%);
+  backdrop-filter: blur(20px) saturate(119%);
+  box-shadow:
+    inset 0 1px 0 0
+      light-dark(
+        color-mix(in oklab, white 70%, transparent),
+        color-mix(in oklab, white 10%, transparent)
+      ),
+    0 24px 60px -27px light-dark(rgb(0 0 0 / 0.4), rgb(0 0 0 / 0.75));
+}
+
 /* --- Stream-safe privacy ---------------------------------------------------
    Mark personal/identifying values with .tc-secret; a data-privacy attribute on
    <html> hides them. Pure CSS, so it applies to elements LiveView adds later
@@ -535,6 +958,71 @@ body {
 }
 .tc-seg-btn:hover {
   opacity: 1;
+}
+
+/* --- Colorway swatches (theme picker) -------------------------------------
+   Each chip previews a palette by scoping daisyUI's vars to that theme via a
+   nested data-theme, so the four dots render in *that* palette's colours — not
+   the active one. Picking dispatches phx:set-colorway (see layouts.ex). */
+.tc-swatch {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: var(--radius-field, 0.4rem);
+  border: 1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent);
+  background: color-mix(in oklab, var(--color-base-content) 4%, transparent);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.tc-swatch:hover {
+  border-color: color-mix(in oklab, var(--color-base-content) 28%, transparent);
+  background: color-mix(in oklab, var(--color-base-content) 9%, transparent);
+}
+.tc-swatch-colors {
+  flex: none;
+  display: inline-grid;
+  grid-template-columns: repeat(2, 0.5rem);
+  grid-template-rows: repeat(2, 0.5rem);
+  gap: 1px;
+  padding: 2px;
+  border-radius: 0.3rem;
+  background: color-mix(in oklab, var(--color-base-content) 18%, transparent);
+}
+.tc-swatch-colors > span {
+  border-radius: 1px;
+}
+.tc-swatch-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Ring the swatch whose colorway is the one currently applied. State lives in
+   data-colorway on <html> (set by the theme script); enumerated because CSS
+   can't match an ancestor's attribute value against a descendant's. Keep this
+   list in sync with DropDoctor.Themes + the "default" brand swatch (a test
+   enforces it). */
+[data-colorway="default"] .tc-swatch[data-colorway="default"],
+[data-colorway="winter"] .tc-swatch[data-colorway="winter"],
+[data-colorway="aqua"] .tc-swatch[data-colorway="aqua"],
+[data-colorway="forest"] .tc-swatch[data-colorway="forest"],
+[data-colorway="matrix"] .tc-swatch[data-colorway="matrix"],
+[data-colorway="mocha"] .tc-swatch[data-colorway="mocha"],
+[data-colorway="sunset"] .tc-swatch[data-colorway="sunset"],
+[data-colorway="rose"] .tc-swatch[data-colorway="rose"],
+[data-colorway="candy"] .tc-swatch[data-colorway="candy"],
+[data-colorway="grape"] .tc-swatch[data-colorway="grape"],
+[data-colorway="cyberpunk"] .tc-swatch[data-colorway="cyberpunk"] {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
 }
 
 /* --- Verdict pill: matches the report's status-pill exactly ---------------- */

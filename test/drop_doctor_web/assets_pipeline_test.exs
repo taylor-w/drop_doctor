@@ -72,6 +72,67 @@ defmodule DropDoctorWeb.AssetsPipelineTest do
     end
   end
 
+  describe "colorway theme sync" do
+    # A colorway (DropDoctor.Themes) is wired across spots that CSS/HEEx can't
+    # cross-check at compile time: the light/dark palette rules and the active-ring
+    # selector in app.css, plus the report's mirrored accent. Drift is silent — a
+    # swatch with no palette, no ring, or a report that doesn't match — so we
+    # assert they all agree here. The canonical source is DropDoctor.Themes.
+    @app_css "assets/css/app.css"
+
+    test "every colorway has light and dark palette rules in app.css" do
+      css = File.read!(@app_css)
+
+      for cw <- DropDoctor.Themes.colorways(), variant <- ~w(light dark) do
+        selector = ~s([data-theme="#{cw.name}-#{variant}"])
+
+        assert String.contains?(css, selector),
+               "colorway #{inspect(cw.name)} is missing its #{variant} palette #{selector} in #{@app_css}"
+      end
+    end
+
+    test "every colorway and the default have an active-ring selector" do
+      css = File.read!(@app_css)
+
+      for name <- ["default" | DropDoctor.Themes.names()] do
+        selector = ~s([data-colorway="#{name}"] .tc-swatch[data-colorway="#{name}"])
+
+        assert String.contains?(css, selector),
+               "colorway #{inspect(name)} has no active-ring selector in #{@app_css}. Add: #{selector}"
+      end
+    end
+
+    test "report accents match each colorway's own primary block in app.css" do
+      # The report (DropDoctor.Themes.primary_*) retints itself per colorway. Each
+      # value must equal the --color-primary inside *that colorway's own*
+      # `[data-theme="<name>-<variant>"]` block — checking the scoped block (not
+      # just presence anywhere) also catches two colorways being swapped.
+      css = File.read!(@app_css)
+
+      for cw <- DropDoctor.Themes.colorways(),
+          {variant, expected} <- [{"light", cw.primary_light}, {"dark", cw.primary_dark}] do
+        block = theme_block(css, "#{cw.name}-#{variant}")
+
+        assert block,
+               "no [data-theme=\"#{cw.name}-#{variant}\"] block found in #{@app_css}"
+
+        assert String.contains?(block, "--color-primary: #{expected};"),
+               "#{cw.name}-#{variant} block does not set --color-primary: #{expected}; (the report would mis-tint). Block: #{inspect(block)}"
+      end
+    end
+  end
+
+  # Body of the rule `[data-theme="<theme>"] { ... }` (these palette rules are
+  # flat — no nested braces), or nil if absent.
+  defp theme_block(css, theme) do
+    case Regex.run(~r/\[data-theme="#{Regex.escape(theme)}"\]\s*\{([^}]*)\}/, css,
+           capture: :all_but_first
+         ) do
+      [body] -> body
+      _ -> nil
+    end
+  end
+
   # Pull the hook names out of `<script :type={Phoenix.LiveView.ColocatedHook}
   # name=".Foo">` declarations across the web layer, stripping the leading dot
   # (the "current module" marker) so they match the fully-qualified manifest key.

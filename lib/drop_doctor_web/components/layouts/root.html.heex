@@ -13,22 +13,43 @@
     <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>
     </script>
     <script>
+      // Theme has two independent dimensions, both persisted client-side and
+      // applied here before paint (no flash):
+      //   mode     — localStorage["phx:theme"]: "light" | "dark" | absent=system
+      //   colorway — localStorage["tc:colorway"]: palette name | absent=default
+      // The applied data-theme is the combination, e.g. "winter-dark"; the brand
+      // "default" colorway stays the bare "light"/"dark" themes. We also mirror
+      // mode/colorway onto <html> so the picker's pill + active-ring are pure CSS.
       (() => {
-        const setTheme = (theme) => {
-          if (theme === "system") {
-            localStorage.removeItem("phx:theme");
-            document.documentElement.removeAttribute("data-theme");
-          } else {
-            localStorage.setItem("phx:theme", theme);
-            document.documentElement.setAttribute("data-theme", theme);
-          }
+        const root = document.documentElement;
+        const MODE = "phx:theme", CW = "tc:colorway";
+        const mq = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)");
+        const mode = () => {
+          const m = localStorage.getItem(MODE);
+          return m === "light" || m === "dark" ? m : (mq && mq.matches ? "dark" : "light");
         };
-        if (!document.documentElement.hasAttribute("data-theme")) {
-          setTheme(localStorage.getItem("phx:theme") || "system");
-        }
-        window.addEventListener("storage", (e) => e.key === "phx:theme" && setTheme(e.newValue || "system"));
-        
-        window.addEventListener("phx:set-theme", (e) => setTheme(e.target.dataset.phxTheme));
+        const apply = () => {
+          const cw = localStorage.getItem(CW) || "default";
+          root.setAttribute("data-theme", cw === "default" ? mode() : cw + "-" + mode());
+          root.setAttribute("data-mode", localStorage.getItem(MODE) || "system");
+          root.setAttribute("data-colorway", cw);
+        };
+        apply();
+        // Follow the OS in system mode, and any change made in another tab.
+        if (mq) mq.addEventListener("change", () => {
+          if (!["light", "dark"].includes(localStorage.getItem(MODE))) apply();
+        });
+        window.addEventListener("storage", (e) => (e.key === MODE || e.key === CW) && apply());
+        window.addEventListener("phx:set-theme", (e) => {
+          const m = e.target.dataset.phxTheme;
+          m === "system" ? localStorage.removeItem(MODE) : localStorage.setItem(MODE, m);
+          apply();
+        });
+        window.addEventListener("phx:set-colorway", (e) => {
+          const c = e.target.dataset.colorway;
+          !c || c === "default" ? localStorage.removeItem(CW) : localStorage.setItem(CW, c);
+          apply();
+        });
       })();
     </script>
     <script>

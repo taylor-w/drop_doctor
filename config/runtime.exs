@@ -35,7 +35,9 @@ if config_env() == :prod do
   #   Linux:   ~/.local/share/drop_doctor
   #   macOS:   ~/Library/Application Support/drop_doctor
   #   Windows: %APPDATA%\drop_doctor
-  data_dir = System.get_env("DROP_DOCTOR_DATA_DIR") || :filename.basedir(:user_data, "drop_doctor")
+  data_dir =
+    System.get_env("DROP_DOCTOR_DATA_DIR") || :filename.basedir(:user_data, "drop_doctor")
+
   File.mkdir_p!(data_dir)
 
   database_path = System.get_env("DATABASE_PATH") || Path.join(data_dir, "drop_doctor.db")
