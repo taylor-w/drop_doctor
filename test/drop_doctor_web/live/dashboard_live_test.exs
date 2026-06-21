@@ -31,6 +31,34 @@ defmodule DropDoctorWeb.DashboardLiveTest do
     assert html =~ "Speed test"
   end
 
+  test "renders the theme picker with independent mode and colorway controls", %{conn: conn} do
+    {:ok, _view, html} = live(conn, "/")
+
+    assert html =~ ~s(aria-label="Choose a color theme")
+    assert html =~ "Mode"
+    assert html =~ "Colorway"
+
+    # The loved system/light/dark mode segment (dispatches phx:set-theme).
+    for mode <- ~w(system light dark) do
+      assert html =~ ~s(data-phx-theme="#{mode}")
+    end
+
+    # Default + a representative spread of the new colorways (dispatch
+    # phx:set-colorway). Mode and colorway compose into e.g. winter-dark.
+    assert html =~ ~s(data-colorway="default")
+
+    for colorway <- ~w(winter forest matrix rose cyberpunk) do
+      assert html =~ ~s(data-colorway="#{colorway}")
+    end
+
+    # One swatch per colorway plus Default — locks the set so a stray add/remove
+    # is caught against the canonical DropDoctor.Themes list.
+    colorway_count =
+      html |> String.split(~s(data-colorway=")) |> length() |> Kernel.-(1)
+
+    assert colorway_count == 1 + length(DropDoctor.Themes.colorways())
+  end
+
   test "renders the speed test module with a run button", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/")
     assert has_element?(view, "#run-speedtest")

@@ -233,6 +233,7 @@ defmodule DropDoctor.Report do
     <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="DropDoctor connection report — timestamped proof of internet drops, latency spikes and jitter, with where the fault lies, ready to share with your ISP.">
     <title>DropDoctor — ISP report (#{esc(iso8601(report.generated_at))})</title>
     <script>#{theme_script()}</script>
     <style>#{styles()}</style>
@@ -258,30 +259,44 @@ defmodule DropDoctor.Report do
     """
   end
 
-  # Match the dashboard's selected theme. The app stores its choice in
-  # localStorage["phx:theme"] (light | dark | absent = system); we read the same
-  # key and resolve "system" against the OS exactly as daisyUI does (dark theme
-  # is prefersdark). Runs in <head> before paint, so there's no flash. Print
-  # always forces a clean light palette via @media print regardless of this.
+  # Per-colorway --primary overrides for the report, mirrored from the dashboard's
+  # palettes (DropDoctor.Themes) so the two stay in step. The light/dark neutral
+  # groups carry bg/ink/lines; only the accent changes per colorway, per mode.
+  defp colorway_theme_css do
+    DropDoctor.Themes.colorways()
+    |> Enum.map_join("\n", fn cw ->
+      ~s(      :root[data-theme="#{cw.name}-light"] { --primary: #{cw.primary_light}; }\n) <>
+        ~s(      :root[data-theme="#{cw.name}-dark"] { --primary: #{cw.primary_dark}; })
+    end)
+  end
+
+  # Match the dashboard's selected theme. The app stores two keys:
+  # localStorage["phx:theme"] (mode: light | dark | absent = system) and
+  # localStorage["tc:colorway"] (palette | absent = default). We resolve the same
+  # combined data-theme the dashboard does (e.g. "winter-dark"); the stylesheet
+  # below tints itself to match. Runs in <head> before paint, so there's no
+  # flash, and follows the app live (OS flips, and edits in the dashboard tab).
+  # Print always forces a clean light palette via @media print regardless.
   defp theme_script do
     """
     (() => {
       try {
-        const stored = localStorage.getItem("phx:theme");
+        const root = document.documentElement;
         const mq = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)");
-        const resolve = () => (stored === "light" || stored === "dark")
-          ? stored : (mq && mq.matches ? "dark" : "light");
-        document.documentElement.setAttribute("data-theme", resolve());
-        // Follow the app live: OS flips (system mode) and toggles in the dashboard tab.
-        if (mq && stored !== "light" && stored !== "dark") {
-          mq.addEventListener("change", () => document.documentElement.setAttribute("data-theme", resolve()));
-        }
+        const mode = () => {
+          const m = localStorage.getItem("phx:theme");
+          return (m === "light" || m === "dark") ? m : (mq && mq.matches ? "dark" : "light");
+        };
+        const apply = () => {
+          const cw = localStorage.getItem("tc:colorway") || "default";
+          root.setAttribute("data-theme", cw === "default" ? mode() : cw + "-" + mode());
+        };
+        apply();
+        if (mq) mq.addEventListener("change", () => {
+          if (!["light", "dark"].includes(localStorage.getItem("phx:theme"))) apply();
+        });
         window.addEventListener("storage", (e) => {
-          if (e.key === "phx:theme") {
-            const v = e.newValue;
-            document.documentElement.setAttribute("data-theme",
-              (v === "light" || v === "dark") ? v : (mq && mq.matches ? "dark" : "light"));
-          }
+          if (e.key === "phx:theme" || e.key === "tc:colorway") apply();
         });
       } catch (_) { document.documentElement.setAttribute("data-theme", "dark"); }
     })();
@@ -889,7 +904,7 @@ defmodule DropDoctor.Report do
        @media screen so it never fights the print block's professional palette.
        theme_script() sets data-theme on <html> to track the running app. */
     @media screen {
-      :root[data-theme="light"] {
+      :root[data-theme="light"], :root[data-theme$="-light"] {
         color-scheme: light;
         --bg: oklch(96% 0.001 286.375);
         --card: oklch(98% 0 0);
@@ -902,7 +917,14 @@ defmodule DropDoctor.Report do
         --bad: oklch(58% 0.253 17.585);
       }
       /* Links lighten the primary toward white on dark; darken it on light. */
-      :root[data-theme="light"] a { color: color-mix(in oklab, var(--primary) 78%, black); }
+      :root[data-theme="light"] a, :root[data-theme$="-light"] a {
+        color: color-mix(in oklab, var(--primary) 78%, black);
+      }
+      /* Per-colorway accent: the neutral groups above carry bg/ink/lines for the
+         light and dark modes; here each colorway just retints --primary (and thus
+         the page glow, headings accent and links) so the report tracks whatever
+         palette the dashboard is on. Generated from DropDoctor.Themes. */
+    #{colorway_theme_css()}
     }
     * { box-sizing: border-box; }
     body { font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; color: var(--ink);
