@@ -26,6 +26,21 @@ defmodule DropDoctorWeb.ReportControllerTest do
     assert body =~ "Save as PDF"
   end
 
+  test "GET /report wires the page to the live feed for in-place updates", %{conn: conn} do
+    body = conn |> get("/report") |> response(200)
+
+    assert body =~ "/report/live"
+    assert body =~ "EventSource"
+    # live-update targets the rendering shares with the SSE feed
+    assert body =~ ~s(id="dd-verdict")
+    assert body =~ ~s(id="dd-stability")
+  end
+
+  # The SSE feed itself (`GET /report/live`) is a long-lived stream: its action
+  # only returns when the client disconnects, so a blocking ConnTest request
+  # would hang. Its payload is `Report.live_payload/1`, covered directly in
+  # DropDoctor.ReportTest — the controller is a thin transport over it.
+
   test "GET /report.csv downloads a CSV with the header row", %{conn: conn} do
     conn = get(conn, "/report.csv")
 
