@@ -303,6 +303,61 @@ defmodule DropDoctor.ReportTest do
 
       assert html =~ "No deep diagnostic has been run"
     end
+
+    test "wires up the live feed without sacrificing self-containment" do
+      html = build() |> Report.to_html()
+
+      # the page knows how to subscribe to the live feed...
+      assert html =~ "EventSource"
+      assert html =~ Report.live_path()
+      assert html =~ ~s(id="dd-live-status")
+
+      # ...but stays a standalone document — no external script/stylesheet refs,
+      # so a saved copy still renders (and prints) identically offline.
+      refute html =~ "<script src"
+      refute html =~ "<link "
+    end
+  end
+
+  describe "live_payload/1" do
+    test "returns the dynamic sections keyed by their DOM id" do
+      payload =
+        build(spike_events: spike_events(), speed_tests: speed_tests())
+        |> Report.live_payload()
+
+      assert payload |> Map.keys() |> Enum.sort() ==
+               ~w(dd-deep dd-header dd-history dd-speed dd-stability dd-verdict)
+
+      # the very fragments the printed page shows, so a live swap is identical
+      assert payload["dd-verdict"] =~ "This is your ISP"
+      assert payload["dd-stability"] =~ "Latency spiked to 180.0ms"
+      assert payload["dd-speed"] =~ "94.2"
+    end
+
+    test "every slot it emits has a matching target element in the page" do
+      report = build()
+      html = Report.to_html(report)
+
+      for id <- Map.keys(Report.live_payload(report)) do
+        assert html =~ ~s(id="#{id}"), "page is missing live-update target #{id}"
+      end
+    end
+
+    test "escapes HTML in dynamic content, just like the page" do
+      payload =
+        Report.build(
+          now: @now,
+          verdict: %{verdict() | headline: "<script>alert(1)</script>"},
+          deep: nil,
+          sweeps: sweeps(),
+          spike_events: [],
+          speed_tests: []
+        )
+        |> Report.live_payload()
+
+      refute payload["dd-verdict"] =~ "<script>alert(1)</script>"
+      assert payload["dd-verdict"] =~ "&lt;script&gt;alert(1)&lt;/script&gt;"
+    end
   end
 
   describe "filename/2" do

@@ -26,6 +26,32 @@ defmodule DropDoctorWeb.ReportControllerTest do
     assert body =~ "Save as PDF"
   end
 
+  test "GET /report wires the page to the live feed for in-place updates", %{conn: conn} do
+    body = conn |> get("/report") |> response(200)
+
+    assert body =~ "/report/live"
+    assert body =~ "EventSource"
+    # live-update targets the rendering shares with the SSE feed
+    assert body =~ ~s(id="dd-verdict")
+    assert body =~ ~s(id="dd-stability")
+  end
+
+  test "Report.live_path/0 stays bound to the live SSE route", %{conn: _conn} do
+    # The in-page EventSource URL (`Report.live_path/0`) and the router are two
+    # copies of the same path; this fails loudly if either drifts.
+    info =
+      Phoenix.Router.route_info(DropDoctorWeb.Router, "GET", DropDoctor.Report.live_path(), "")
+
+    assert info.plug == DropDoctorWeb.ReportController
+    assert info.plug_opts == :live
+  end
+
+  # The SSE feed's streaming behaviour (coalescing, diffing, heartbeat,
+  # disconnect) is a long-lived loop that a blocking ConnTest request can't
+  # drive, so it's covered two ways instead: deterministically in
+  # `DropDoctorWeb.ReportFeedTest` (engine, no socket) and end-to-end over a real
+  # connection in `DropDoctorWeb.ReportLiveSSETest`.
+
   test "GET /report.csv downloads a CSV with the header row", %{conn: conn} do
     conn = get(conn, "/report.csv")
 

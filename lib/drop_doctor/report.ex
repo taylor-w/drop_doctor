@@ -225,6 +225,12 @@ defmodule DropDoctor.Report do
   @doc """
   A self-contained, print-ready HTML document. No external CSS/JS — it renders
   identically offline and prints cleanly to PDF.
+
+  When served by the running app the document also wires itself to a live feed
+  (`live_update_script/0` → the `/report/live` SSE endpoint) so an open tab shows
+  new sweeps, spikes and speed tests without a manual refresh. That wiring is
+  inert offline: a saved copy opened from disk (`file://`) never connects and
+  stays the frozen snapshot it was when saved.
   """
   def to_html(report) do
     """
@@ -242,22 +248,103 @@ defmodule DropDoctor.Report do
     <body>
     #{toolbar()}
     <main>
-    #{header_section(report)}
-    #{verdict_section(report.verdict)}
-    #{speed_section(report.speed_tests)}
-    #{deep_section(report.deep)}
-    #{stability_section(report.spike_events)}
-    #{history_section(report.stats)}
+    #{render_slots(live_sections(report))}
     #{footer_section(report)}
     </main>
     <script>
       // Lets the "Save as PDF" button reach the browser's print dialog.
       function dropDoctorPrint(){ window.print(); }
     </script>
+    <script>#{live_update_script()}</script>
     </body>
     </html>
     """
   end
+
+  @doc """
+  The report's dynamic sections keyed by their DOM id — the exact fragments the
+  live endpoint streams so an open `/report` tab can update in place. Built from
+  the same `live_sections/1` the printed page renders, so a connected client and
+  a fresh page load can never disagree, and there's no second renderer to keep
+  in step.
+  """
+  def live_payload(report), do: Map.new(live_sections(report))
+
+  # The dynamic body of the report as an ordered list of `{dom_id, html}` slots.
+  # `to_html/1` renders these into the page (each wrapped in a stable element the
+  # live feed can target); `live_payload/1` ships the same map over SSE. Defined
+  # once so the page and the live feed always render byte-identical sections.
+  defp live_sections(report) do
+    [
+      {"dd-header", header_section(report)},
+      {"dd-verdict", verdict_section(report.verdict)},
+      {"dd-speed", speed_section(report.speed_tests)},
+      {"dd-deep", deep_section(report.deep)},
+      {"dd-stability", stability_section(report.spike_events)},
+      {"dd-history", history_section(report.stats)}
+    ]
+  end
+
+  # Each slot gets a stable id the live script swaps by `innerHTML`. The wrapper
+  # is `display:contents` (see styles/0), so it adds no box of its own and the
+  # page lays out exactly as if the sections were inline here.
+  defp render_slots(sections) do
+    Enum.map_join(sections, "\n", fn {id, html} ->
+      ~s(<div id="#{id}" class="dd-slot">#{html}</div>)
+    end)
+  end
+
+  # Subscribes the open report to the live feed and swaps in changed sections as
+  # they arrive. Deliberately defensive and self-contained:
+  #
+  #   * Only connects over http(s) — a report saved to disk and opened from
+  #     `file://` stays a static snapshot (the whole point of the export).
+  #   * Sets `innerHTML` only when a section actually changed, so the page
+  #     doesn't churn (and a stream-safe "hover to peek" isn't interrupted)
+  #     every heartbeat.
+  #   * After a swap, dispatches `dd:updated` so the timezone/privacy script
+  #     re-formats the freshly-inserted timestamps (privacy blur/redaction is
+  #     pure CSS, so swapped nodes inherit it with no JS).
+  #   * EventSource reconnects on its own; we just reflect the state in a small
+  #     no-print "Live" indicator.
+  defp live_update_script do
+    """
+    (() => {
+      if (location.protocol !== "http:" && location.protocol !== "https:") return;
+      if (!("EventSource" in window)) return;
+
+      const badge = document.getElementById("dd-live-status");
+      const setState = (s) => { if (badge) badge.setAttribute("data-state", s); };
+
+      // Stream the same window the page was rendered with.
+      const params = new URLSearchParams(location.search);
+      const qs = params.has("limit") ? "?limit=" + encodeURIComponent(params.get("limit")) : "";
+
+      let es;
+      const connect = () => {
+        es = new EventSource("#{live_path()}" + qs);
+        es.onopen = () => setState("live");
+        es.onerror = () => setState("reconnecting"); // EventSource retries by itself
+        es.onmessage = (e) => {
+          let slots;
+          try { slots = JSON.parse(e.data); } catch (_) { return; }
+          let changed = false;
+          for (const id in slots) {
+            const el = document.getElementById(id);
+            if (el && el.innerHTML !== slots[id]) { el.innerHTML = slots[id]; changed = true; }
+          }
+          if (changed) document.dispatchEvent(new Event("dd:updated"));
+        };
+      };
+      connect();
+
+      window.addEventListener("pagehide", () => { if (es) es.close(); });
+    })();
+    """
+  end
+
+  @doc "Path of the live (Server-Sent Events) report feed."
+  def live_path, do: "/report/live"
 
   # Per-colorway --primary overrides for the report, mirrored from the dashboard's
   # palettes (DropDoctor.Themes) so the two stay in step. The light/dark neutral
@@ -342,6 +429,8 @@ defmodule DropDoctor.Report do
         if (t) { const m = (root.getAttribute("data-tz") || "utc") === "utc" ? "local" : "utc"; root.setAttribute("data-tz", m); try { localStorage.setItem("tc:tz", m); } catch (_) {} apply(); }
       });
       if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply); else apply();
+      // Re-format timestamps after the live feed swaps in fresh sections.
+      document.addEventListener("dd:updated", apply);
     })();
     """
   end
@@ -354,6 +443,9 @@ defmodule DropDoctor.Report do
       <a href="/spikes.csv">#{ico("zap")} Spike log (CSV)</a>
       <a href="/speeds.csv">#{ico("gauge")} Speed tests (CSV)</a>
       <span class="hint">Tip: in the print dialog choose “Save as PDF” as the destination.</span>
+      <span id="dd-live-status" class="dd-live no-print" data-state="connecting" aria-live="polite" title="This report updates live as new measurements arrive — no need to refresh.">
+        <span class="dd-live-dot" aria-hidden="true"></span><span class="dd-live-text"></span>
+      </span>
       <div class="tc-controls">
         <span class="tc-seg" role="group" aria-label="Stream-safe privacy" title="Stream-safe: hide IPs, hostnames & times so you can screen-share. Blur = hover to peek; lock = redact.">
           <button type="button" data-privacy-set="off" title="Show all values">#{ico("eye")}</button>
@@ -1021,6 +1113,20 @@ defmodule DropDoctor.Report do
                box-shadow: inset 0 1px 0 0 color-mix(in oklab, white 12%, transparent); }
     .toolbar > button:hover { background-color: color-mix(in oklab, var(--primary) 92%, var(--card)); border-color: color-mix(in oklab, var(--primary) 55%, transparent); }
     .toolbar .hint { color: var(--muted); font-size: .82rem; }
+    /* Live-update slots: a structural wrapper the live feed swaps by id. Adds no
+       box of its own, so the page lays out exactly as if the sections were inline. */
+    .dd-slot { display: contents; }
+    /* "Live" indicator — reflects the SSE connection state; hidden in print. */
+    .dd-live { display: inline-flex; align-items: center; gap: .4rem; font-size: .75rem; font-weight: 600; color: var(--muted); user-select: none; }
+    .dd-live-dot { width: .5rem; height: .5rem; border-radius: 9999px; background: currentColor; flex: none; }
+    .dd-live-text::after { content: "Connecting…"; }
+    .dd-live[data-state="live"] { color: var(--ok); }
+    .dd-live[data-state="live"] .dd-live-dot { animation: dd-pulse 2s ease-in-out infinite; }
+    .dd-live[data-state="live"] .dd-live-text::after { content: "Live"; }
+    .dd-live[data-state="reconnecting"] { color: var(--warn); }
+    .dd-live[data-state="reconnecting"] .dd-live-text::after { content: "Reconnecting…"; }
+    @keyframes dd-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+    @media (prefers-reduced-motion: reduce) { .dd-live-dot { animation: none !important; } }
     /* View controls: stream-safe privacy + timezone toggle (match the dashboard). */
     .tc-controls { display: inline-flex; align-items: center; gap: .5rem; margin-left: auto; }
     .tc-seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 9999px; border: 1px solid var(--line); background: color-mix(in oklab, var(--ink) 6%, transparent); }

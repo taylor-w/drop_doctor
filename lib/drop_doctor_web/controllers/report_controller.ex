@@ -7,7 +7,8 @@ defmodule DropDoctorWeb.ReportController do
   """
   use DropDoctorWeb, :controller
 
-  alias DropDoctor.Report
+  alias DropDoctor.{Monitor, Report, SpikeMonitor}
+  alias DropDoctorWeb.ReportFeed
 
   @max_limit 20_000
 
@@ -18,6 +19,48 @@ defmodule DropDoctorWeb.ReportController do
     conn
     |> put_resp_content_type("text/html")
     |> send_resp(200, html)
+  end
+
+  @doc """
+  Live report feed over Server-Sent Events. An open `/report` tab subscribes
+  here and the report's dynamic sections are pushed as they change, so new
+  sweeps, spikes and speed tests appear with no manual refresh. The streaming
+  itself lives in `DropDoctorWeb.ReportFeed`; this action just clamps the window,
+  subscribes, and hands over a chunking connection.
+
+  Security & privacy:
+
+    * Read-only, same-origin `GET`. The payload is the same already-escaped HTML
+      the printed page renders (`DropDoctor.Report.live_payload/1`), JSON-encoded
+      so it can't break the SSE framing — no injection surface beyond the page.
+    * The payload deliberately carries the *same* data as `/report`, including
+      IPs/hostnames. Stream-safe privacy (blur/redact) is a client-side **view**
+      toggle — "blur = hover to peek" only works with the value present — so
+      redacting server-side would both break that UX and split the page and feed
+      into two renderers. The app binds to loopback only (see `config/*.exs`), so
+      this feed exposes nothing the same-origin page didn't already.
+    * `?limit=` is clamped exactly like the printable report. It can't shrink to
+      a cheaper live-only window without the first update visibly truncating the
+      history table the page rendered, so the cost ceiling is, by design, the
+      same as one `/report` render — paid at most ~1.3×/s via coalescing, and
+      only re-sent per section when that section's HTML actually changed.
+  """
+  def live(conn, params) do
+    lim = limit(params)
+
+    # Subscribe *before* the first snapshot so a measurement recorded in the gap
+    # between the page's render and this stream isn't missed. Both topics are
+    # cheap signals that report content may have changed.
+    Monitor.subscribe()
+    Phoenix.PubSub.subscribe(DropDoctor.PubSub, SpikeMonitor.topic())
+
+    conn
+    |> put_resp_header("content-type", "text/event-stream")
+    |> put_resp_header("cache-control", "no-cache")
+    # Defeat reverse-proxy / response buffering so events flush immediately.
+    |> put_resp_header("x-accel-buffering", "no")
+    |> send_chunked(200)
+    |> ReportFeed.run_conn(fn -> Report.build(limit: lim) |> Report.live_payload() end)
   end
 
   @doc "CSV download of the sweep timeline, newest data named in the filename."
