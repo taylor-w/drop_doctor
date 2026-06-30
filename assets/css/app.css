@@ -1103,3 +1103,143 @@ body {
     transparent 48%
   );
 }
+
+/* --- Guided tour: spotlight walkthrough ------------------------------------
+   A theme-matched coachmark overlay built entirely client-side (assets/js/tour.js).
+   The "lighting" is a single lit cutout (.tc-tour-spot) whose huge box-shadow
+   spread dims the rest of the page; a transparent catcher blocks interaction
+   beneath. The card reuses the elevated-glass language of the panels so it sits
+   in whatever theme/colorway is active. Sits above the timeline modal (z-50). */
+.tc-tour-root {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+}
+/* Transparent click-blocker: enforces modality without dismissing on stray clicks. */
+.tc-tour-catch {
+  position: absolute;
+  inset: 0;
+}
+/* Centered (target-less) steps have nothing to spotlight, so the catcher itself
+   carries the dim wash. */
+.tc-tour-root[data-centered="true"] .tc-tour-catch {
+  background: rgb(0 0 0 / 0.55);
+}
+/* The lit cutout. Its spread shadow is the dim; the inset ring draws the edge. */
+.tc-tour-spot {
+  position: absolute;
+  border-radius: var(--radius-box, 0.5rem);
+  pointer-events: none;
+  box-shadow:
+    0 0 0 9999px rgb(0 0 0 / 0.55),
+    inset 0 0 0 2px color-mix(in oklab, var(--color-primary) 70%, white);
+  transition:
+    top 0.2s ease,
+    left 0.2s ease,
+    width 0.2s ease,
+    height 0.2s ease,
+    opacity 0.2s ease;
+}
+.tc-tour-card {
+  position: absolute;
+  width: min(20rem, calc(100vw - 2rem));
+  padding: 1rem 1.1rem 0.9rem;
+  border-radius: var(--radius-box, 0.5rem);
+  border: 1px solid var(--color-base-300);
+  background-color: color-mix(in oklab, var(--color-base-200) 96%, transparent);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklab, white 5%, transparent),
+    transparent 55%
+  );
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklab, white 9%, transparent),
+    0 24px 48px -24px rgb(0 0 0 / 0.7);
+  color: var(--color-base-content);
+  transition:
+    top 0.2s ease,
+    left 0.2s ease;
+}
+.tc-tour-counter {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.5;
+}
+.tc-tour-title {
+  margin-top: 0.2rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.tc-tour-body {
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  opacity: 0.85;
+}
+.tc-tour-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+}
+.tc-tour-spacer {
+  flex: 1 1 auto;
+}
+.tc-tour-nav button {
+  border-radius: var(--radius-field, 0.4rem);
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+.tc-tour-skip {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-base-content);
+  opacity: 0.55;
+}
+.tc-tour-skip:hover {
+  opacity: 0.9;
+}
+.tc-tour-back {
+  border: 1px solid color-mix(in oklab, var(--color-base-content) 16%, transparent);
+  background-color: color-mix(in oklab, var(--color-base-content) 7%, transparent);
+  color: var(--color-base-content);
+}
+.tc-tour-back:hover:not(:disabled) {
+  background-color: color-mix(in oklab, var(--color-base-content) 13%, transparent);
+}
+.tc-tour-back:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.tc-tour-next {
+  border: 1px solid color-mix(in oklab, var(--color-primary) 38%, transparent);
+  background-color: color-mix(in oklab, var(--color-primary) 80%, var(--color-base-100));
+  color: var(--color-primary-content);
+  box-shadow: inset 0 1px 0 0 color-mix(in oklab, white 12%, transparent);
+}
+.tc-tour-next:hover {
+  background-color: color-mix(in oklab, var(--color-primary) 92%, var(--color-base-100));
+  border-color: color-mix(in oklab, var(--color-primary) 55%, transparent);
+}
+.tc-tour-nav button:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-primary) 70%, white);
+  outline-offset: 2px;
+}
+/* Respect reduced-motion: no spotlight glide, no smooth scroll (handled in JS). */
+@media (prefers-reduced-motion: reduce) {
+  .tc-tour-spot,
+  .tc-tour-card {
+    transition: none;
+  }
+}

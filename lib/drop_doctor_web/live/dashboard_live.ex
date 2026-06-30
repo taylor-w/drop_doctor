@@ -376,7 +376,7 @@ defmodule DropDoctorWeb.DashboardLive do
           </div>
           <%!-- The speed test is the labelled action; the monitoring controls
                (pause / re-check) are compact icon-only buttons beside it. --%>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2" data-tour="controls">
             <button
               id="run-speedtest"
               type="button"
@@ -429,7 +429,10 @@ defmodule DropDoctorWeb.DashboardLive do
         <% end %>
         
     <!-- PIPELINE HERO — verdict banner with status wash + elevation -->
-        <div class={"card overflow-hidden border border-base-300 tc-hero #{hero_tint(@verdict.status)}"}>
+        <div
+          class={"card overflow-hidden border border-base-300 tc-hero #{hero_tint(@verdict.status)}"}
+          data-tour="verdict"
+        >
           <div class="card-body gap-5">
             <!-- Verdict banner (left) + speed test (top-right) -->
             <div class="flex items-start justify-between gap-4 flex-col sm:flex-row">
@@ -457,7 +460,7 @@ defmodule DropDoctorWeb.DashboardLive do
             
     <!-- The animated path (+ the measurement it reveals, kept together so the
                  panel collapses without leaving a gap) -->
-            <div>
+            <div data-tour="pipeline">
               <div class="flex items-stretch gap-1 sm:gap-2 overflow-x-auto py-2">
                 <%= for {node, i} <- Enum.with_index(@nodes) do %>
                   <!-- Node -->
@@ -535,7 +538,7 @@ defmodule DropDoctorWeb.DashboardLive do
     <!-- BENTO GRID -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <!-- Stability -->
-          <div class="card border border-base-300 tc-panel">
+          <div class="card border border-base-300 tc-panel" data-tour="stability">
             <div class="card-body gap-3">
               <h3 class="text-sm font-semibold flex items-center gap-2 pb-2 mb-1 border-b border-base-300">
                 <.lucide name="activity" class="size-4" /> Live stability
@@ -579,7 +582,7 @@ defmodule DropDoctorWeb.DashboardLive do
           </div>
           
     <!-- History -->
-          <div class="card border border-base-300 tc-panel">
+          <div class="card border border-base-300 tc-panel" data-tour="history">
             <div class="card-body gap-3">
               <h3 class="text-sm font-semibold flex items-center justify-between gap-2 pb-2 mb-1 border-b border-base-300">
                 <span class="flex items-center gap-2">

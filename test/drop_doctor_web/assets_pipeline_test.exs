@@ -72,6 +72,33 @@ defmodule DropDoctorWeb.AssetsPipelineTest do
     end
   end
 
+  describe "guided tour wiring" do
+    # The tour is a plain ES module (not a colocated hook), so it only ships if
+    # app.js both imports it and calls its initialiser. Either line silently
+    # dropped means the navbar's compass button does nothing in a prod bundle.
+    @app_js "assets/js/app.js"
+
+    test "app.js imports and initialises the tour module" do
+      js = File.read!(@app_js)
+
+      assert js =~ ~s(from "./tour.js"),
+             ~s(app.js must import the tour module from "./tour.js")
+
+      assert js =~ "initTour(",
+             "app.js must call initTour() so the navbar's tour button is wired up"
+    end
+
+    test "the tour persists a first-run seen flag so it auto-opens only once" do
+      tour = File.read!("assets/js/tour.js")
+
+      assert tour =~ ~s("tc:tour-seen"),
+             ~s(tour.js must persist the first-run flag under localStorage["tc:tour-seen"])
+
+      assert tour =~ "maybeAutoStart(",
+             "tour.js must auto-start the walkthrough for first-time visitors"
+    end
+  end
+
   describe "colorway theme sync" do
     # A colorway (DropDoctor.Themes) is wired across spots that CSS/HEEx can't
     # cross-check at compile time: the light/dark palette rules and the active-ring

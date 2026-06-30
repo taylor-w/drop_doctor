@@ -171,6 +171,45 @@ defmodule DropDoctorWeb.DashboardLiveTest do
     end
   end
 
+  describe "guided tour" do
+    test "renders the tour trigger to the left of the privacy controls", %{conn: conn} do
+      {:ok, _view, html} = live(conn, "/")
+
+      assert html =~ ~s(data-tour-start)
+      assert html =~ ~s(aria-label="Take a guided tour of DropDoctor")
+
+      # It must sit before the visibility/privacy controls (and the theme picker)
+      # in source order — that's the placement the user asked for.
+      tour_at = index_of(html, "data-tour-start")
+      privacy_at = index_of(html, ~s(data-tour="privacy"))
+      theme_at = index_of(html, ~s(data-tour="theme"))
+
+      assert tour_at < privacy_at,
+             "tour button must render before the privacy controls"
+
+      assert tour_at < theme_at,
+             "tour button must render before the theme picker"
+    end
+
+    # The JS walkthrough (assets/js/tour.js) anchors each step to a
+    # `data-tour="<key>"` marker. Those markers live in the templates, so the two
+    # can drift silently — a renamed/removed anchor leaves a step pointing at
+    # nothing. Assert every anchor the tour references is actually in the DOM.
+    test "every anchor referenced by the tour exists in the rendered dashboard", %{conn: conn} do
+      {:ok, _view, html} = live(conn, "/")
+
+      anchors = tour_anchors()
+
+      assert anchors != [],
+             "expected to parse step anchors from assets/js/tour.js — did the STEPS shape change?"
+
+      for anchor <- anchors do
+        assert html =~ ~s(data-tour="#{anchor}"),
+               ~s(tour step anchors [data-tour="#{anchor}"], but no such element renders on the dashboard)
+      end
+    end
+  end
+
   test "clear data wipes recorded rows and confirms", %{conn: conn} do
     seed_sweep(%{internet_rtt_ms: 14.0, router_rtt_ms: 3.0})
     assert DropDoctor.Measurements.count() == 1
@@ -186,5 +225,25 @@ defmodule DropDoctorWeb.DashboardLiveTest do
     %Sweep{}
     |> Sweep.changeset(Map.merge(%{status: "healthy", culprit: "none"}, attrs))
     |> Repo.insert!()
+  end
+
+  # Position of the first occurrence of `needle` in `haystack` (or a large
+  # sentinel if absent, so an ordering assertion fails loudly rather than passing
+  # on a missing element).
+  defp index_of(haystack, needle) do
+    case :binary.match(haystack, needle) do
+      {start, _len} -> start
+      :nomatch -> 1_000_000_000
+    end
+  end
+
+  # The non-null `anchor: "<key>"` values from the tour's STEPS array. Centered
+  # steps (anchor: null) have no DOM marker and are intentionally excluded.
+  defp tour_anchors do
+    Regex.scan(~r/anchor:\s*"([a-z-]+)"/, File.read!("assets/js/tour.js"),
+      capture: :all_but_first
+    )
+    |> List.flatten()
+    |> Enum.uniq()
   end
 end
