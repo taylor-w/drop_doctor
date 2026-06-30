@@ -136,100 +136,137 @@
   --color-error-content: oklch(20% 0.04 20);
 }
 
-/* Winter — cool blue */
+/* Slate — graphite & steel: a near-mono charcoal/grey canvas, deliberately the
+   understated colorway. Chroma is kept low so it reads as refined graphite, but
+   the primary/accent carry a faint steel-blue so it still has a pulse rather than
+   looking dead-grey. The neutral anchor of the set. */
+[data-theme="slate-light"] {
+  color-scheme: light;
+  --color-base-100: oklch(98.5% 0.004 250);
+  --color-base-200: oklch(96% 0.006 250);
+  --color-base-300: oklch(91% 0.009 250);
+  --color-base-content: oklch(25% 0.014 250);
+  --color-primary: oklch(48% 0.045 250);
+  --color-primary-content: oklch(98% 0.01 250);
+  --color-secondary: oklch(56% 0.03 245);
+  --color-secondary-content: oklch(98% 0.01 245);
+  --color-accent: oklch(60% 0.06 235);
+  --color-accent-content: oklch(98% 0.01 235);
+  --color-neutral: oklch(32% 0.015 250);
+  --color-neutral-content: oklch(97% 0.006 250);
+}
+[data-theme="slate-dark"] {
+  color-scheme: dark;
+  --color-base-100: oklch(23% 0.012 250);
+  --color-base-200: oklch(19% 0.011 250);
+  --color-base-300: oklch(15.5% 0.01 250);
+  --color-base-content: oklch(92% 0.013 250);
+  --color-primary: oklch(72% 0.05 250);
+  --color-primary-content: oklch(20% 0.03 250);
+  --color-secondary: oklch(74% 0.035 245);
+  --color-secondary-content: oklch(20% 0.03 245);
+  --color-accent: oklch(76% 0.07 235);
+  --color-accent-content: oklch(20% 0.03 235);
+  --color-neutral: oklch(40% 0.015 250);
+  --color-neutral-content: oklch(95% 0.008 250);
+}
+
+/* Winter — glacial blue: a cold steel-blue canvas, icy primary, cyan accent */
 [data-theme="winter-light"] {
   color-scheme: light;
-  --color-base-100: oklch(98.5% 0.008 245);
-  --color-base-200: oklch(96.5% 0.01 245);
-  --color-base-300: oklch(92% 0.014 245);
-  --color-base-content: oklch(26% 0.035 245);
-  --color-primary: oklch(57% 0.14 245);
-  --color-primary-content: oklch(98% 0.012 245);
-  --color-secondary: oklch(64% 0.1 220);
-  --color-secondary-content: oklch(98% 0.012 220);
-  --color-accent: oklch(64% 0.12 195);
-  --color-accent-content: oklch(98% 0.012 195);
-  --color-neutral: oklch(30% 0.03 245);
-  --color-neutral-content: oklch(97% 0.01 245);
+  --color-base-100: oklch(98.5% 0.013 240);
+  --color-base-200: oklch(96% 0.02 240);
+  --color-base-300: oklch(91% 0.03 242);
+  --color-base-content: oklch(25% 0.05 245);
+  --color-primary: oklch(56% 0.17 245);
+  --color-primary-content: oklch(98% 0.02 245);
+  --color-secondary: oklch(62% 0.13 218);
+  --color-secondary-content: oklch(98% 0.02 218);
+  --color-accent: oklch(66% 0.14 195);
+  --color-accent-content: oklch(98% 0.02 195);
+  --color-neutral: oklch(30% 0.04 245);
+  --color-neutral-content: oklch(97% 0.012 245);
 }
 [data-theme="winter-dark"] {
   color-scheme: dark;
-  --color-base-100: oklch(26% 0.022 245);
-  --color-base-200: oklch(22% 0.02 245);
-  --color-base-300: oklch(18.5% 0.018 245);
-  --color-base-content: oklch(94% 0.02 245);
-  --color-primary: oklch(72% 0.15 245);
-  --color-primary-content: oklch(20% 0.04 245);
-  --color-secondary: oklch(74% 0.1 220);
-  --color-secondary-content: oklch(20% 0.04 220);
-  --color-accent: oklch(76% 0.12 195);
+  --color-base-100: oklch(22% 0.04 248);
+  --color-base-200: oklch(18% 0.038 248);
+  --color-base-300: oklch(14.5% 0.034 250);
+  --color-base-content: oklch(92% 0.04 240);
+  --color-primary: oklch(74% 0.18 245);
+  --color-primary-content: oklch(20% 0.05 245);
+  --color-secondary: oklch(77% 0.13 218);
+  --color-secondary-content: oklch(20% 0.05 218);
+  --color-accent: oklch(80% 0.14 195);
   --color-accent-content: oklch(20% 0.04 195);
-  --color-neutral: oklch(38% 0.03 245);
-  --color-neutral-content: oklch(96% 0.01 245);
+  --color-neutral: oklch(40% 0.04 245);
+  --color-neutral-content: oklch(95% 0.02 245);
 }
 
-/* Aqua — teal / cyan */
+/* Aqua — tropical water: a saturated teal canvas, cyan primary, spring-green accent */
 [data-theme="aqua-light"] {
   color-scheme: light;
-  --color-base-100: oklch(98.5% 0.009 195);
-  --color-base-200: oklch(96.5% 0.012 195);
-  --color-base-300: oklch(92% 0.016 195);
-  --color-base-content: oklch(27% 0.04 200);
-  --color-primary: oklch(58% 0.12 195);
-  --color-primary-content: oklch(98% 0.012 195);
-  --color-secondary: oklch(64% 0.11 210);
-  --color-secondary-content: oklch(98% 0.012 210);
-  --color-accent: oklch(66% 0.13 175);
-  --color-accent-content: oklch(98% 0.012 175);
-  --color-neutral: oklch(30% 0.03 200);
-  --color-neutral-content: oklch(97% 0.01 200);
+  --color-base-100: oklch(98.5% 0.014 195);
+  --color-base-200: oklch(96% 0.022 195);
+  --color-base-300: oklch(91% 0.032 192);
+  --color-base-content: oklch(26% 0.05 200);
+  --color-primary: oklch(57% 0.15 192);
+  --color-primary-content: oklch(98% 0.02 192);
+  --color-secondary: oklch(63% 0.13 210);
+  --color-secondary-content: oklch(98% 0.02 210);
+  --color-accent: oklch(68% 0.15 172);
+  --color-accent-content: oklch(98% 0.02 172);
+  --color-neutral: oklch(30% 0.04 200);
+  --color-neutral-content: oklch(97% 0.012 200);
 }
 [data-theme="aqua-dark"] {
   color-scheme: dark;
-  --color-base-100: oklch(25% 0.025 200);
-  --color-base-200: oklch(21% 0.022 200);
-  --color-base-300: oklch(17.5% 0.02 200);
-  --color-base-content: oklch(93% 0.025 195);
-  --color-primary: oklch(74% 0.14 195);
-  --color-primary-content: oklch(20% 0.04 195);
-  --color-secondary: oklch(74% 0.12 210);
-  --color-secondary-content: oklch(20% 0.04 210);
-  --color-accent: oklch(78% 0.14 175);
-  --color-accent-content: oklch(20% 0.04 175);
-  --color-neutral: oklch(38% 0.03 200);
-  --color-neutral-content: oklch(96% 0.01 200);
+  --color-base-100: oklch(21% 0.045 198);
+  --color-base-200: oklch(17% 0.04 198);
+  --color-base-300: oklch(13.5% 0.036 200);
+  --color-base-content: oklch(91% 0.045 192);
+  --color-primary: oklch(75% 0.17 192);
+  --color-primary-content: oklch(20% 0.05 192);
+  --color-secondary: oklch(76% 0.13 210);
+  --color-secondary-content: oklch(20% 0.05 210);
+  --color-accent: oklch(82% 0.16 172);
+  --color-accent-content: oklch(20% 0.04 172);
+  --color-neutral: oklch(40% 0.045 200);
+  --color-neutral-content: oklch(95% 0.02 200);
 }
 
-/* Forest — natural green */
+/* Forest — deep pine: an earthy evergreen canvas with a warm amber accent.
+   Distinct from Matrix (which is near-black phosphor): here the base is a lived-in
+   forest green, not the void, and the amber accent brings woodland warmth. */
 [data-theme="forest-light"] {
   color-scheme: light;
-  --color-base-100: oklch(98.5% 0.01 150);
-  --color-base-200: oklch(96% 0.014 150);
-  --color-base-300: oklch(91.5% 0.018 150);
-  --color-base-content: oklch(26% 0.04 150);
-  --color-primary: oklch(52% 0.13 150);
-  --color-primary-content: oklch(98% 0.013 150);
-  --color-secondary: oklch(62% 0.11 128);
-  --color-secondary-content: oklch(98% 0.013 128);
-  --color-accent: oklch(70% 0.15 90);
-  --color-accent-content: oklch(24% 0.05 90);
-  --color-neutral: oklch(30% 0.03 150);
-  --color-neutral-content: oklch(97% 0.01 150);
+  --color-base-100: oklch(98.5% 0.014 145);
+  --color-base-200: oklch(96% 0.022 145);
+  --color-base-300: oklch(91% 0.03 140);
+  --color-base-content: oklch(26% 0.05 150);
+  --color-primary: oklch(51% 0.16 148);
+  --color-primary-content: oklch(98% 0.02 148);
+  --color-secondary: oklch(61% 0.12 128);
+  --color-secondary-content: oklch(98% 0.02 128);
+  --color-accent: oklch(70% 0.16 85);
+  --color-accent-content: oklch(24% 0.05 85);
+  --color-neutral: oklch(30% 0.04 150);
+  --color-neutral-content: oklch(97% 0.012 150);
 }
 [data-theme="forest-dark"] {
   color-scheme: dark;
-  --color-base-100: oklch(25% 0.025 150);
-  --color-base-200: oklch(21% 0.022 150);
-  --color-base-300: oklch(17.5% 0.02 150);
-  --color-base-content: oklch(93% 0.025 150);
-  --color-primary: oklch(72% 0.15 150);
-  --color-primary-content: oklch(20% 0.04 150);
-  --color-secondary: oklch(74% 0.12 128);
-  --color-secondary-content: oklch(20% 0.04 128);
-  --color-accent: oklch(80% 0.15 90);
-  --color-accent-content: oklch(24% 0.05 90);
-  --color-neutral: oklch(38% 0.03 150);
-  --color-neutral-content: oklch(96% 0.01 150);
+  --color-base-100: oklch(20% 0.045 150);
+  --color-base-200: oklch(16% 0.04 150);
+  --color-base-300: oklch(12.5% 0.036 152);
+  --color-base-content: oklch(91% 0.05 150);
+  --color-primary: oklch(70% 0.18 150);
+  --color-primary-content: oklch(20% 0.05 150);
+  --color-secondary: oklch(74% 0.13 128);
+  --color-secondary-content: oklch(20% 0.05 128);
+  --color-accent: oklch(82% 0.16 85);
+  --color-accent-content: oklch(24% 0.05 85);
+  --color-neutral: oklch(40% 0.045 150);
+  --color-neutral-content: oklch(95% 0.02 150);
 }
 
 /* Matrix — phosphor green on black; the hacker vibe */
@@ -264,196 +301,207 @@
   --color-neutral-content: oklch(92% 0.12 145);
 }
 
-/* Mocha — warm coffee / sepia */
+/* Mocha — roasted coffee: a warm espresso canvas, caramel primary, terracotta
+   accent. Stays deliberately low-chroma so it reads as cozy sepia, not orange —
+   the warm earthtone counterpart to the cool/vivid colorways. */
 [data-theme="mocha-light"] {
   color-scheme: light;
-  --color-base-100: oklch(98% 0.012 75);
-  --color-base-200: oklch(95.5% 0.016 70);
-  --color-base-300: oklch(90.5% 0.022 65);
-  --color-base-content: oklch(27% 0.03 60);
-  --color-primary: oklch(52% 0.08 65);
-  --color-primary-content: oklch(98% 0.012 75);
-  --color-secondary: oklch(60% 0.06 45);
-  --color-secondary-content: oklch(98% 0.012 45);
-  --color-accent: oklch(64% 0.09 30);
-  --color-accent-content: oklch(98% 0.012 30);
-  --color-neutral: oklch(32% 0.03 60);
-  --color-neutral-content: oklch(96% 0.012 75);
+  --color-base-100: oklch(98% 0.016 75);
+  --color-base-200: oklch(95% 0.024 70);
+  --color-base-300: oklch(89.5% 0.032 65);
+  --color-base-content: oklch(27% 0.04 55);
+  --color-primary: oklch(52% 0.1 62);
+  --color-primary-content: oklch(98% 0.014 75);
+  --color-secondary: oklch(60% 0.07 45);
+  --color-secondary-content: oklch(98% 0.014 45);
+  --color-accent: oklch(64% 0.11 30);
+  --color-accent-content: oklch(98% 0.014 30);
+  --color-neutral: oklch(32% 0.035 60);
+  --color-neutral-content: oklch(96% 0.014 75);
 }
 [data-theme="mocha-dark"] {
   color-scheme: dark;
-  --color-base-100: oklch(25% 0.02 60);
-  --color-base-200: oklch(21% 0.018 60);
-  --color-base-300: oklch(17.5% 0.016 60);
-  --color-base-content: oklch(93% 0.02 70);
-  --color-primary: oklch(74% 0.08 65);
+  --color-base-100: oklch(23% 0.03 58);
+  --color-base-200: oklch(19% 0.027 58);
+  --color-base-300: oklch(15.5% 0.024 58);
+  --color-base-content: oklch(92% 0.03 68);
+  --color-primary: oklch(74% 0.1 62);
   --color-primary-content: oklch(22% 0.04 60);
-  --color-secondary: oklch(72% 0.06 45);
+  --color-secondary: oklch(72% 0.07 45);
   --color-secondary-content: oklch(22% 0.04 45);
-  --color-accent: oklch(76% 0.09 30);
+  --color-accent: oklch(76% 0.11 30);
   --color-accent-content: oklch(22% 0.04 30);
-  --color-neutral: oklch(40% 0.025 60);
-  --color-neutral-content: oklch(95% 0.012 70);
+  --color-neutral: oklch(41% 0.03 60);
+  --color-neutral-content: oklch(95% 0.014 70);
 }
 
-/* Sunset — orange into pink */
+/* Sunset — dusk sky: a warm plum-amber canvas, blazing orange primary, and a
+   magenta accent so the gradient reads orange → pink. The warm twin of Rose:
+   orange-led, where Rose is red-led. */
 [data-theme="sunset-light"] {
   color-scheme: light;
-  --color-base-100: oklch(98.5% 0.012 60);
-  --color-base-200: oklch(96.5% 0.016 50);
-  --color-base-300: oklch(92% 0.022 45);
-  --color-base-content: oklch(27% 0.04 40);
-  --color-primary: oklch(55% 0.17 45);
-  --color-primary-content: oklch(98% 0.013 60);
-  --color-secondary: oklch(66% 0.14 28);
-  --color-secondary-content: oklch(98% 0.013 28);
-  --color-accent: oklch(62% 0.16 350);
-  --color-accent-content: oklch(98% 0.013 350);
-  --color-neutral: oklch(31% 0.03 40);
+  --color-base-100: oklch(98.5% 0.016 60);
+  --color-base-200: oklch(96% 0.024 50);
+  --color-base-300: oklch(91% 0.032 42);
+  --color-base-content: oklch(27% 0.05 40);
+  --color-primary: oklch(56% 0.19 42);
+  --color-primary-content: oklch(98% 0.015 60);
+  --color-secondary: oklch(66% 0.16 25);
+  --color-secondary-content: oklch(98% 0.015 25);
+  --color-accent: oklch(62% 0.18 350);
+  --color-accent-content: oklch(98% 0.015 350);
+  --color-neutral: oklch(31% 0.04 40);
   --color-neutral-content: oklch(97% 0.012 60);
 }
 [data-theme="sunset-dark"] {
   color-scheme: dark;
-  --color-base-100: oklch(25% 0.022 40);
-  --color-base-200: oklch(21% 0.02 40);
-  --color-base-300: oklch(17.5% 0.018 40);
-  --color-base-content: oklch(94% 0.02 55);
-  --color-primary: oklch(75% 0.16 45);
+  --color-base-100: oklch(22% 0.04 35);
+  --color-base-200: oklch(18% 0.037 35);
+  --color-base-300: oklch(14.5% 0.034 35);
+  --color-base-content: oklch(93% 0.04 50);
+  --color-primary: oklch(74% 0.19 42);
   --color-primary-content: oklch(22% 0.05 40);
-  --color-secondary: oklch(76% 0.14 28);
-  --color-secondary-content: oklch(22% 0.05 28);
-  --color-accent: oklch(74% 0.16 350);
+  --color-secondary: oklch(76% 0.16 25);
+  --color-secondary-content: oklch(22% 0.05 25);
+  --color-accent: oklch(74% 0.18 350);
   --color-accent-content: oklch(20% 0.04 350);
-  --color-neutral: oklch(39% 0.03 40);
+  --color-neutral: oklch(40% 0.04 40);
   --color-neutral-content: oklch(95% 0.012 55);
 }
 
-/* Rose — red into pink */
+/* Rose — wine & blush: a deep ruby canvas, vivid crimson primary, soft pink
+   accent. The cool/red twin of Sunset — red-led, romantic, not orange. */
 [data-theme="rose-light"] {
   color-scheme: light;
-  --color-base-100: oklch(98.5% 0.01 20);
-  --color-base-200: oklch(96.5% 0.014 18);
-  --color-base-300: oklch(92% 0.02 15);
-  --color-base-content: oklch(26% 0.04 18);
-  --color-primary: oklch(56% 0.19 18);
-  --color-primary-content: oklch(98% 0.013 20);
-  --color-secondary: oklch(60% 0.15 5);
-  --color-secondary-content: oklch(98% 0.013 5);
-  --color-accent: oklch(64% 0.13 350);
-  --color-accent-content: oklch(98% 0.013 350);
-  --color-neutral: oklch(30% 0.04 18);
+  --color-base-100: oklch(98.5% 0.014 20);
+  --color-base-200: oklch(96% 0.022 18);
+  --color-base-300: oklch(91% 0.03 15);
+  --color-base-content: oklch(26% 0.05 18);
+  --color-primary: oklch(55% 0.21 18);
+  --color-primary-content: oklch(98% 0.015 20);
+  --color-secondary: oklch(60% 0.17 5);
+  --color-secondary-content: oklch(98% 0.015 5);
+  --color-accent: oklch(64% 0.15 350);
+  --color-accent-content: oklch(98% 0.015 350);
+  --color-neutral: oklch(30% 0.045 18);
   --color-neutral-content: oklch(97% 0.012 20);
 }
 [data-theme="rose-dark"] {
   color-scheme: dark;
-  --color-base-100: oklch(25% 0.025 18);
-  --color-base-200: oklch(21% 0.022 18);
-  --color-base-300: oklch(17.5% 0.02 15);
-  --color-base-content: oklch(94% 0.025 20);
-  --color-primary: oklch(70% 0.19 18);
+  --color-base-100: oklch(21% 0.045 18);
+  --color-base-200: oklch(17% 0.04 18);
+  --color-base-300: oklch(13.5% 0.036 16);
+  --color-base-content: oklch(93% 0.045 20);
+  --color-primary: oklch(69% 0.21 15);
   --color-primary-content: oklch(20% 0.05 18);
-  --color-secondary: oklch(72% 0.15 5);
+  --color-secondary: oklch(72% 0.17 5);
   --color-secondary-content: oklch(20% 0.05 5);
-  --color-accent: oklch(76% 0.13 350);
+  --color-accent: oklch(76% 0.15 350);
   --color-accent-content: oklch(20% 0.04 350);
-  --color-neutral: oklch(38% 0.035 18);
-  --color-neutral-content: oklch(96% 0.012 20);
+  --color-neutral: oklch(39% 0.04 18);
+  --color-neutral-content: oklch(95% 0.02 20);
 }
 
-/* Candy — playful pink */
+/* Candy — bubblegum: a bright pink canvas with a cool cyan accent for sweet,
+   high-energy contrast. Where Rose is a single deep red, Candy is pink playing
+   against teal — the complementary pop sets it apart. */
 [data-theme="candy-light"] {
   color-scheme: light;
-  --color-base-100: oklch(99% 0.008 350);
-  --color-base-200: oklch(96.5% 0.014 350);
-  --color-base-300: oklch(92% 0.02 345);
-  --color-base-content: oklch(27% 0.04 345);
-  --color-primary: oklch(55% 0.17 350);
-  --color-primary-content: oklch(98% 0.013 350);
-  --color-secondary: oklch(66% 0.13 330);
-  --color-secondary-content: oklch(98% 0.013 330);
-  --color-accent: oklch(66% 0.12 200);
-  --color-accent-content: oklch(98% 0.013 200);
-  --color-neutral: oklch(31% 0.035 345);
+  --color-base-100: oklch(99% 0.012 350);
+  --color-base-200: oklch(96.5% 0.022 350);
+  --color-base-300: oklch(91% 0.03 345);
+  --color-base-content: oklch(27% 0.05 345);
+  --color-primary: oklch(56% 0.2 350);
+  --color-primary-content: oklch(98% 0.015 350);
+  --color-secondary: oklch(66% 0.15 330);
+  --color-secondary-content: oklch(98% 0.015 330);
+  --color-accent: oklch(66% 0.14 200);
+  --color-accent-content: oklch(98% 0.015 200);
+  --color-neutral: oklch(31% 0.04 345);
   --color-neutral-content: oklch(97% 0.012 350);
 }
 [data-theme="candy-dark"] {
   color-scheme: dark;
-  --color-base-100: oklch(24% 0.025 345);
-  --color-base-200: oklch(20.5% 0.022 345);
-  --color-base-300: oklch(17% 0.02 345);
-  --color-base-content: oklch(94% 0.025 350);
-  --color-primary: oklch(76% 0.16 350);
+  --color-base-100: oklch(21% 0.045 345);
+  --color-base-200: oklch(17% 0.04 345);
+  --color-base-300: oklch(13.5% 0.036 345);
+  --color-base-content: oklch(93% 0.045 350);
+  --color-primary: oklch(77% 0.19 350);
   --color-primary-content: oklch(22% 0.05 350);
-  --color-secondary: oklch(76% 0.13 330);
+  --color-secondary: oklch(77% 0.15 330);
   --color-secondary-content: oklch(22% 0.05 330);
-  --color-accent: oklch(78% 0.13 200);
+  --color-accent: oklch(80% 0.15 200);
   --color-accent-content: oklch(20% 0.04 200);
-  --color-neutral: oklch(39% 0.035 345);
-  --color-neutral-content: oklch(96% 0.012 350);
+  --color-neutral: oklch(40% 0.04 345);
+  --color-neutral-content: oklch(95% 0.02 350);
 }
 
-/* Grape — purple */
+/* Grape — royal amethyst: a rich aubergine canvas, vivid violet primary, and a
+   magenta accent that leans the purple toward berry. The deepest, most saturated
+   of the cool colorways. */
 [data-theme="grape-light"] {
   color-scheme: light;
-  --color-base-100: oklch(98.5% 0.01 300);
-  --color-base-200: oklch(96.5% 0.014 300);
-  --color-base-300: oklch(92% 0.02 300);
-  --color-base-content: oklch(26% 0.04 300);
-  --color-primary: oklch(54% 0.18 300);
-  --color-primary-content: oklch(98% 0.013 300);
-  --color-secondary: oklch(60% 0.15 282);
-  --color-secondary-content: oklch(98% 0.013 282);
-  --color-accent: oklch(64% 0.16 330);
-  --color-accent-content: oklch(98% 0.013 330);
-  --color-neutral: oklch(30% 0.04 300);
+  --color-base-100: oklch(98.5% 0.014 300);
+  --color-base-200: oklch(96% 0.022 300);
+  --color-base-300: oklch(91% 0.03 300);
+  --color-base-content: oklch(26% 0.05 300);
+  --color-primary: oklch(53% 0.2 298);
+  --color-primary-content: oklch(98% 0.015 300);
+  --color-secondary: oklch(60% 0.16 282);
+  --color-secondary-content: oklch(98% 0.015 282);
+  --color-accent: oklch(64% 0.17 330);
+  --color-accent-content: oklch(98% 0.015 330);
+  --color-neutral: oklch(30% 0.045 300);
   --color-neutral-content: oklch(97% 0.012 300);
 }
 [data-theme="grape-dark"] {
   color-scheme: dark;
-  --color-base-100: oklch(24% 0.028 300);
-  --color-base-200: oklch(20.5% 0.025 300);
-  --color-base-300: oklch(17% 0.022 300);
-  --color-base-content: oklch(94% 0.025 300);
-  --color-primary: oklch(72% 0.18 300);
+  --color-base-100: oklch(21% 0.05 300);
+  --color-base-200: oklch(17% 0.045 300);
+  --color-base-300: oklch(13.5% 0.04 300);
+  --color-base-content: oklch(93% 0.045 300);
+  --color-primary: oklch(72% 0.21 300);
   --color-primary-content: oklch(20% 0.05 300);
-  --color-secondary: oklch(74% 0.15 282);
+  --color-secondary: oklch(74% 0.16 282);
   --color-secondary-content: oklch(20% 0.05 282);
-  --color-accent: oklch(76% 0.17 330);
+  --color-accent: oklch(76% 0.18 330);
   --color-accent-content: oklch(20% 0.04 330);
-  --color-neutral: oklch(38% 0.035 300);
-  --color-neutral-content: oklch(96% 0.012 300);
+  --color-neutral: oklch(39% 0.045 300);
+  --color-neutral-content: oklch(95% 0.02 300);
 }
 
-/* Cyberpunk — neon magenta + cyan (no more bright-yellow) */
+/* Cyberpunk — neon noir: an inky violet canvas lit by hot-magenta primary and
+   electric-cyan accent. Alongside Matrix it anchors the "near-black, high-voltage"
+   end of the set — Matrix is one-colour phosphor, Cyberpunk is magenta-vs-cyan clash. */
 [data-theme="cyberpunk-light"] {
   color-scheme: light;
-  --color-base-100: oklch(98% 0.015 330);
-  --color-base-200: oklch(95.5% 0.02 330);
-  --color-base-300: oklch(90% 0.03 320);
-  --color-base-content: oklch(26% 0.06 320);
+  --color-base-100: oklch(98% 0.018 330);
+  --color-base-200: oklch(95% 0.028 330);
+  --color-base-300: oklch(89% 0.038 320);
+  --color-base-content: oklch(26% 0.07 320);
   --color-primary: oklch(58% 0.22 330);
   --color-primary-content: oklch(98% 0.02 330);
-  --color-secondary: oklch(60% 0.17 300);
+  --color-secondary: oklch(60% 0.18 300);
   --color-secondary-content: oklch(98% 0.02 300);
-  --color-accent: oklch(68% 0.15 195);
+  --color-accent: oklch(68% 0.16 195);
   --color-accent-content: oklch(20% 0.04 195);
-  --color-neutral: oklch(30% 0.05 320);
+  --color-neutral: oklch(30% 0.06 320);
   --color-neutral-content: oklch(97% 0.02 320);
 }
 [data-theme="cyberpunk-dark"] {
   color-scheme: dark;
-  --color-base-100: oklch(18% 0.04 320);
-  --color-base-200: oklch(15% 0.038 320);
-  --color-base-300: oklch(12% 0.035 320);
-  --color-base-content: oklch(93% 0.04 320);
+  --color-base-100: oklch(16% 0.05 322);
+  --color-base-200: oklch(13% 0.045 322);
+  --color-base-300: oklch(10.5% 0.04 322);
+  --color-base-content: oklch(93% 0.05 320);
   --color-primary: oklch(74% 0.28 330);
   --color-primary-content: oklch(18% 0.06 330);
-  --color-secondary: oklch(72% 0.2 295);
+  --color-secondary: oklch(72% 0.21 295);
   --color-secondary-content: oklch(18% 0.05 295);
   --color-accent: oklch(84% 0.18 195);
   --color-accent-content: oklch(20% 0.05 195);
-  --color-neutral: oklch(38% 0.05 320);
-  --color-neutral-content: oklch(95% 0.02 320);
+  --color-neutral: oklch(38% 0.06 320);
+  --color-neutral-content: oklch(95% 0.025 320);
 }
 
 /* Light colorways use a bright accent, so its readable foreground is DARK text,
@@ -1011,6 +1059,7 @@ body {
    list in sync with DropDoctor.Themes + the "default" brand swatch (a test
    enforces it). */
 [data-colorway="default"] .tc-swatch[data-colorway="default"],
+[data-colorway="slate"] .tc-swatch[data-colorway="slate"],
 [data-colorway="winter"] .tc-swatch[data-colorway="winter"],
 [data-colorway="aqua"] .tc-swatch[data-colorway="aqua"],
 [data-colorway="forest"] .tc-swatch[data-colorway="forest"],
