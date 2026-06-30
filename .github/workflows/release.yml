@@ -36,26 +36,23 @@ jobs:
         # p7zip-full: provides `7z`, required to build the Windows target.
         run: sudo apt-get update && sudo apt-get install -y xz-utils p7zip-full
 
-      - name: Cache deps and build
+      # Cache fetched dep SOURCES only — NOT _build. A release must compile from
+      # a clean tree so the binary always matches the tagged source. _build holds
+      # both compiled .beam files AND the assembled release at
+      # _build/prod/rel/drop_doctor/. With the cache keyed only on mix.lock, a
+      # source-only change restored a stale _build from an earlier release, and
+      # `mix release` reused the already-assembled (old) rel — which is how
+      # v0.2.0 and v0.2.1 shipped without the tour and Slate. Recompiling deps on
+      # an infrequent release is a cheap price for a correct artifact.
+      - name: Cache deps
         uses: actions/cache@v4
         with:
-          path: |
-            deps
-            _build
-          key: ${{ runner.os }}-release-${{ hashFiles('mix.lock') }}
-          restore-keys: ${{ runner.os }}-release-
+          path: deps
+          key: ${{ runner.os }}-release-deps-${{ hashFiles('mix.lock') }}
+          restore-keys: ${{ runner.os }}-release-deps-
 
       - name: Install dependencies
         run: mix deps.get --only prod
-
-      - name: Force a fresh app compile (deps stay cached)
-        # Caching _build keeps compiled DEPENDENCIES warm (the slow part), but
-        # the key only hashes mix.lock — so a source-only change (unchanged
-        # deps) restores a stale _build from an earlier release. That shipped
-        # v0.2.0 on v0.1.7's _build, silently dropping the tour + Slate. Deleting
-        # only our app's build output forces mix to recompile it and re-stage
-        # priv/ fresh every run, so the binary always matches the tagged source.
-        run: rm -rf "_build/${MIX_ENV}/lib/drop_doctor"
 
       - name: Build and digest assets
         run: |
@@ -63,7 +60,9 @@ jobs:
           mix assets.deploy
 
       - name: Build all Burrito targets
-        run: mix release
+        # --overwrite re-assembles the release even if one is already present,
+        # so a leftover rel can never be wrapped into the binary by mistake.
+        run: mix release --overwrite
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
