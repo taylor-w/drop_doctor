@@ -40,6 +40,13 @@ jobs:
       - name: Install dependencies
         run: mix deps.get
 
+      - name: Force a fresh app compile (deps stay cached)
+        # The _build cache is keyed only on mix.lock, so a source-only change
+        # restores a stale _build. Deleting just our app's build output forces a
+        # clean recompile every run while compiled deps stay warm — keeping CI
+        # honest and consistent with the release workflow.
+        run: rm -rf "_build/${MIX_ENV}/lib/drop_doctor"
+
       - name: Check formatting
         run: mix format --check-formatted
 

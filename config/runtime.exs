@@ -20,9 +20,6 @@ if System.get_env("PHX_SERVER") do
   config :drop_doctor, DropDoctorWeb.Endpoint, server: true
 end
 
-config :drop_doctor, DropDoctorWeb.Endpoint,
-  http: [port: String.to_integer(System.get_env("PORT", "4000"))]
-
 if config_env() == :prod do
   # drop_doctor ships as a double-clickable Burrito binary, so prod must run with
   # ZERO required env vars or terminal interaction: a non-technical user just
@@ -81,7 +78,12 @@ if config_env() == :prod do
     http: [
       # Bind to loopback only: this is a personal diagnostic tool, not a service
       # to expose on the LAN.
-      ip: {127, 0, 0, 1}
+      ip: {127, 0, 0, 1},
+      # PORT overrides the listen port (defaults to 4000) for power users running
+      # several tools at once. Scoped to prod so it can't leak into the test env
+      # and override config/test.exs's fixed port (which kept the SSE test from
+      # binding a deterministic port and made it collide with a local dev server).
+      port: String.to_integer(System.get_env("PORT", "4000"))
     ],
     secret_key_base: secret_key_base
 end
