@@ -48,6 +48,15 @@ jobs:
       - name: Install dependencies
         run: mix deps.get --only prod
 
+      - name: Force a fresh app compile (deps stay cached)
+        # Caching _build keeps compiled DEPENDENCIES warm (the slow part), but
+        # the key only hashes mix.lock — so a source-only change (unchanged
+        # deps) restores a stale _build from an earlier release. That shipped
+        # v0.2.0 on v0.1.7's _build, silently dropping the tour + Slate. Deleting
+        # only our app's build output forces mix to recompile it and re-stage
+        # priv/ fresh every run, so the binary always matches the tagged source.
+        run: rm -rf "_build/${MIX_ENV}/lib/drop_doctor"
+
       - name: Build and digest assets
         run: |
           mix assets.setup
