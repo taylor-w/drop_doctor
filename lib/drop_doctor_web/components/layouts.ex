@@ -38,6 +38,7 @@ defmodule DropDoctorWeb.Layouts do
     <header class="navbar px-4 sm:px-6 lg:px-8">
       <div class="flex-1"></div>
       <div class="flex-none flex items-center gap-2">
+        <.tour_button />
         <.view_controls />
         <.theme_menu />
       </div>
@@ -97,6 +98,42 @@ defmodule DropDoctorWeb.Layouts do
   end
 
   @doc """
+  The "take a tour" trigger: a single icon button that opens the in-app guided
+  walkthrough. Like the privacy/theme controls, the tour is a purely client-side
+  affordance — clicking this button is picked up by event delegation in
+  `assets/js/tour.js` (via the `data-tour-start` hook), so it survives LiveView
+  patches and never round-trips to the server. The walkthrough's steps anchor to
+  the `data-tour="<key>"` markers placed on the live dashboard elements.
+  """
+  def tour_button(assigns) do
+    ~H"""
+    <button
+      type="button"
+      class="tc-seg-btn"
+      data-tour-start
+      aria-label="Take a guided tour of DropDoctor"
+      title="Take a guided tour"
+    >
+      <%!-- Lucide "compass" (inlined; the app ships Heroicons, no Lucide dep). --%>
+      <svg
+        class="size-4"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z" />
+        <circle cx="12" cy="12" r="10" />
+      </svg>
+    </button>
+    """
+  end
+
+  @doc """
   Stream-safe privacy control + timezone toggle. State lives in a `data-privacy`
   / `data-tz` attribute on `<html>` (managed by the inline script in root.html),
   so it persists, applies before paint, and is never re-rendered by LiveView.
@@ -107,6 +144,7 @@ defmodule DropDoctorWeb.Layouts do
       class="tc-seg"
       role="group"
       aria-label="Stream-safe privacy"
+      data-tour="privacy"
       title="Stream-safe: hide IPs, hostnames & times so you can screen-share. Blur = hover to peek; lock = fully redact."
     >
       <button
@@ -168,6 +206,7 @@ defmodule DropDoctorWeb.Layouts do
       <summary
         class="tc-seg-btn list-none [&::-webkit-details-marker]:hidden"
         aria-label="Choose a color theme"
+        data-tour="theme"
         title="Choose a color theme"
       >
         <%!-- Lucide "palette" (inlined; the app ships Heroicons, no Lucide dep). --%>
