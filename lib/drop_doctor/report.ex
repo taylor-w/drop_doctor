@@ -1021,9 +1021,9 @@ defmodule DropDoctor.Report do
     * { box-sizing: border-box; }
     body { font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; color: var(--ink);
            margin: 0; padding: 0 1.25rem 4rem; line-height: 1.55;
-           background-color: var(--bg);
+           background-color: color-mix(in oklab, var(--primary) 9%, var(--bg));
            background-image:
-             radial-gradient(ellipse 70% 40% at 50% -5%, color-mix(in oklab, var(--primary) 22%, transparent), transparent 70%),
+             radial-gradient(ellipse 75% 45% at 50% -6%, color-mix(in oklab, var(--primary) 30%, transparent), transparent 72%),
              radial-gradient(color-mix(in oklab, var(--ink) 5%, transparent) 1px, transparent 1px);
            background-size: 100% 100%, 24px 24px;
            background-attachment: fixed; min-height: 100vh; }
@@ -1031,15 +1031,15 @@ defmodule DropDoctor.Report do
     h1 { font-size: 1.9rem; margin: 0 0 .25rem; letter-spacing: -.02em; display: flex; align-items: center; gap: .55rem; }
     .logo { width: 1.7rem; height: 1.7rem; flex: none; color: var(--primary); }
     .ico { width: 1rem; height: 1rem; flex: none; }
-    h2 { font-size: 1.15rem; margin: 0 0 .75rem; letter-spacing: -.01em; padding-bottom: .5rem; border-bottom: 1px solid var(--line); }
+    h2 { font-size: 1.15rem; margin: 0 0 .75rem; letter-spacing: -.01em; padding-bottom: .5rem; border-bottom: 1px solid color-mix(in oklab, var(--primary) 24%, var(--line)); }
     h3 { font-size: 1rem; margin: 1.1rem 0 .4rem; }
     p { margin: .45rem 0; }
     a { color: color-mix(in oklab, var(--primary) 75%, white); }
     .subtitle { color: var(--muted); margin-top: 0; font-size: 1.02rem; }
     .generated { color: var(--muted); font-size: .9rem; }
     header { padding: 1.75rem 0 .25rem; }
-    section, footer { background: linear-gradient(180deg, color-mix(in oklab, white 5%, transparent), transparent 55%), var(--card);
-           border: 1px solid var(--line); border-radius: var(--radius); padding: 1.25rem 1.4rem; margin: 1rem 0;
+    section, footer { background: linear-gradient(180deg, color-mix(in oklab, white 5%, transparent), transparent 55%), color-mix(in oklab, var(--primary) 7%, var(--card));
+           border: 1px solid color-mix(in oklab, var(--primary) 13%, var(--line)); border-radius: var(--radius); padding: 1.25rem 1.4rem; margin: 1rem 0;
            box-shadow: inset 0 1px 0 0 color-mix(in oklab, white 9%, transparent), 0 12px 32px -22px rgb(0 0 0 / .6); }
     .headline { font-size: 1.18rem; font-weight: 700; }
     .verdict.healthy .headline { color: var(--ok); }

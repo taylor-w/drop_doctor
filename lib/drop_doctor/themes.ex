@@ -29,27 +29,34 @@ defmodule DropDoctor.Themes do
           primary_dark: String.t()
         }
 
-  # Ordered as shown in the picker. Hues sweep the wheel: cool → warm → vivid.
+  # Ordered as shown in the picker. Slate (the neutral) leads beside the brand
+  # Default; the rest then sweep the wheel: cool → warm → vivid.
   # The `primary_*` values MUST equal the `--color-primary` authored for the
   # matching `-light` / `-dark` rule in app.css (the report mirrors them).
   @colorways [
     %{
+      name: "slate",
+      label: "Slate",
+      primary_light: "oklch(48% 0.045 250)",
+      primary_dark: "oklch(72% 0.05 250)"
+    },
+    %{
       name: "winter",
       label: "Winter",
-      primary_light: "oklch(57% 0.14 245)",
-      primary_dark: "oklch(72% 0.15 245)"
+      primary_light: "oklch(56% 0.17 245)",
+      primary_dark: "oklch(74% 0.18 245)"
     },
     %{
       name: "aqua",
       label: "Aqua",
-      primary_light: "oklch(58% 0.12 195)",
-      primary_dark: "oklch(74% 0.14 195)"
+      primary_light: "oklch(57% 0.15 192)",
+      primary_dark: "oklch(75% 0.17 192)"
     },
     %{
       name: "forest",
       label: "Forest",
-      primary_light: "oklch(52% 0.13 150)",
-      primary_dark: "oklch(72% 0.15 150)"
+      primary_light: "oklch(51% 0.16 148)",
+      primary_dark: "oklch(70% 0.18 150)"
     },
     %{
       name: "matrix",
@@ -60,32 +67,32 @@ defmodule DropDoctor.Themes do
     %{
       name: "mocha",
       label: "Mocha",
-      primary_light: "oklch(52% 0.08 65)",
-      primary_dark: "oklch(74% 0.08 65)"
+      primary_light: "oklch(52% 0.1 62)",
+      primary_dark: "oklch(74% 0.1 62)"
     },
     %{
       name: "sunset",
       label: "Sunset",
-      primary_light: "oklch(55% 0.17 45)",
-      primary_dark: "oklch(75% 0.16 45)"
+      primary_light: "oklch(56% 0.19 42)",
+      primary_dark: "oklch(74% 0.19 42)"
     },
     %{
       name: "rose",
       label: "Rose",
-      primary_light: "oklch(56% 0.19 18)",
-      primary_dark: "oklch(70% 0.19 18)"
+      primary_light: "oklch(55% 0.21 18)",
+      primary_dark: "oklch(69% 0.21 15)"
     },
     %{
       name: "candy",
       label: "Candy",
-      primary_light: "oklch(55% 0.17 350)",
-      primary_dark: "oklch(76% 0.16 350)"
+      primary_light: "oklch(56% 0.2 350)",
+      primary_dark: "oklch(77% 0.19 350)"
     },
     %{
       name: "grape",
       label: "Grape",
-      primary_light: "oklch(54% 0.18 300)",
-      primary_dark: "oklch(72% 0.18 300)"
+      primary_light: "oklch(53% 0.2 298)",
+      primary_dark: "oklch(72% 0.21 300)"
     },
     %{
       name: "cyberpunk",
