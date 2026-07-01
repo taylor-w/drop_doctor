@@ -1,14 +1,20 @@
 defmodule DropDoctor.MixProject do
   use Mix.Project
 
+  # The release version is derived from the pushed git tag (APP_VERSION, set by
+  # the Release workflow) so it can never drift from the tag again. Why it must
+  # be unique per release: Burrito unpacks the binary on the end user's machine
+  # into a per-version directory (`drop_doctor_erts-<erts>_<version>`) and skips
+  # unpacking if that directory already exists. Two releases sharing a version
+  # therefore make the second reuse the first's *extracted* payload — running
+  # stale code (this is what hid the tour step in v0.2.3, built as 0.2.2). Local
+  # and CI test builds don't ship, so they fall back to a dev marker.
+  @app_version System.get_env("APP_VERSION", "0.0.0-dev") |> String.replace_prefix("v", "")
+
   def project do
     [
-      # Keep in step with the released git tag: the version names the release
-      # path (`_build/prod/rel/drop_doctor/lib/drop_doctor-<version>`) and is
-      # reported by the running binary. A stale version made every release reuse
-      # the same rel path, which (with a cached _build) shipped old code.
       app: :drop_doctor,
-      version: "0.2.2",
+      version: @app_version,
       elixir: "~> 1.15",
       description:
         "Is bad internet your fault, your DNS, or your ISP? A local tool that finds out — with timestamped proof.",
