@@ -312,10 +312,10 @@ defmodule DropDoctorWeb.Layouts do
   end
 
   # Dispatch the clicked option's set-theme/set-colorway event (the handler reads
-  # the bound button's data-* attribute) and collapse the picker.
+  # the bound button's data-* attribute). The picker stays open on purpose so you
+  # can try modes/colorways one after another; it closes only on a click outside
+  # it or on another control (see the click-away handler in assets/js/app.js).
   defp pick(event, js \\ %JS{}) do
-    js
-    |> JS.dispatch(event)
-    |> JS.remove_attribute("open", to: "#theme-menu")
+    JS.dispatch(js, event)
   end
 end
