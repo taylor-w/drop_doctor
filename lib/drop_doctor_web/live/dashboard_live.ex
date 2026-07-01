@@ -624,7 +624,7 @@ defmodule DropDoctorWeb.DashboardLive do
           </div>
           
     <!-- Save proof -->
-          <div class="card border border-base-300 tc-panel">
+          <div class="card border border-base-300 tc-panel" data-tour="report">
             <div class="card-body gap-3">
               <h3 class="text-sm font-semibold flex items-center gap-2 pb-2 mb-1 border-b border-base-300">
                 <.lucide name="file-text" class="size-4" /> Save proof for your ISP

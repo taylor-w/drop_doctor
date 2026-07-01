@@ -66,6 +66,15 @@ export const STEPS = [
       "and compare your router against your ISP side by side.",
   },
   {
+    anchor: "report",
+    title: "Save proof for your ISP",
+    body:
+      "Caught something? “Open report” launches a shareable report page at " +
+      "/report — the verdict, per-segment evidence and every spike, timestamped " +
+      "and ready to Save as PDF. The other buttons export the raw readings and " +
+      "spike log as CSV, so you keep the receipts.",
+  },
+  {
     anchor: "privacy",
     title: "Stream-safe by a click",
     body:
