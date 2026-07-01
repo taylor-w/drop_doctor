@@ -44,6 +44,23 @@ liveSocket.connect()
 // Wire up the in-app guided tour (delegated click on the navbar's compass button).
 initTour()
 
+// Close the theme picker (a native <details> dropdown) when the user interacts
+// outside it — another control or empty space — instead of leaving it pinned
+// open. Interacting *inside* the panel (picking modes/colorways) is ignored, so
+// the panel stays open to try several choices in a row. Using `pointerdown`
+// means the panel closes *before* the other control's click is handled, so it
+// never swallows the click; Escape closes it too, for keyboard users. Read-only
+// DOM checks (contains) + an attribute toggle — no markup injected, nothing to escape.
+function closeOpenPickers(except) {
+  document.querySelectorAll("details.dropdown[open]").forEach(menu => {
+    if (!except || !menu.contains(except)) menu.removeAttribute("open")
+  })
+}
+document.addEventListener("pointerdown", e => closeOpenPickers(e.target))
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeOpenPickers(null)
+})
+
 // expose liveSocket on window for web console debug logs and latency simulation:
 // >> liveSocket.enableDebug()
 // >> liveSocket.enableLatencySim(1000)  // enabled for duration of browser session
