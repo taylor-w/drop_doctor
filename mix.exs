@@ -3,8 +3,12 @@ defmodule DropDoctor.MixProject do
 
   def project do
     [
+      # Keep in step with the released git tag: the version names the release
+      # path (`_build/prod/rel/drop_doctor/lib/drop_doctor-<version>`) and is
+      # reported by the running binary. A stale version made every release reuse
+      # the same rel path, which (with a cached _build) shipped old code.
       app: :drop_doctor,
-      version: "0.1.6",
+      version: "0.2.2",
       elixir: "~> 1.15",
       description:
         "Is bad internet your fault, your DNS, or your ISP? A local tool that finds out — with timestamped proof.",

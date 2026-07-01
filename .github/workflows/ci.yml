@@ -42,9 +42,11 @@ jobs:
 
       - name: Force a fresh app compile (deps stay cached)
         # The _build cache is keyed only on mix.lock, so a source-only change
-        # restores a stale _build. Deleting just our app's build output forces a
-        # clean recompile every run while compiled deps stay warm — keeping CI
-        # honest and consistent with the release workflow.
+        # restores a stale _build. CI keeps that cache for speed (it never
+        # assembles a release, so the release-side staleness can't apply here),
+        # but deleting just our app's build output forces a clean recompile of
+        # our code every run while compiled deps stay warm — so a lingering
+        # stale artifact can't mask a real break.
         run: rm -rf "_build/${MIX_ENV}/lib/drop_doctor"
 
       - name: Check formatting
