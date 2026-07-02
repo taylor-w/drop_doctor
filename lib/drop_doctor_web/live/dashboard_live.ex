@@ -164,7 +164,8 @@ defmodule DropDoctorWeb.DashboardLive do
   # re-query. The header chevrons route here via phx-click, the ← / → keys via the
   # pan hook. A nil target means the arrow was disabled, so this is a no-op.
   def handle_event("jump_spike", %{"dir" => dir}, socket) do
-    target = if dir == "older", do: socket.assigns.tl_prev_offset, else: socket.assigns.tl_next_offset
+    target =
+      if dir == "older", do: socket.assigns.tl_prev_offset, else: socket.assigns.tl_next_offset
 
     socket = if target, do: socket |> load_timeline(target) |> assign_spike_nav(), else: socket
     {:noreply, socket}
@@ -1108,7 +1109,8 @@ defmodule DropDoctorWeb.DashboardLive do
   defp spike_jump_offset(_socket, _dir, nil), do: nil
 
   defp spike_jump_offset(socket, dir, edge) do
-    spike = if dir == :older, do: Measurements.spike_before(edge), else: Measurements.spike_after(edge)
+    spike =
+      if dir == :older, do: Measurements.spike_before(edge), else: Measurements.spike_after(edge)
 
     case spike do
       %{occurred_at: at} ->
@@ -1116,7 +1118,9 @@ defmodule DropDoctorWeb.DashboardLive do
         # Clamp identically to `load_timeline` so the "would this move?" test below
         # matches exactly what the jump will land on.
         max_off = max(socket.assigns.total_all - @tl_window, 0)
-        offset = (Measurements.count_sweeps_after(at) - div(@tl_window, 2)) |> max(0) |> min(max_off)
+
+        offset =
+          (Measurements.count_sweeps_after(at) - div(@tl_window, 2)) |> max(0) |> min(max_off)
 
         if offset == socket.assigns.tl_offset, do: nil, else: offset
 
