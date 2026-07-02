@@ -58,6 +58,8 @@ defmodule DropDoctorWeb.DashboardLive do
      |> assign(:tl_offset, 0)
      |> assign(:timeline_rows, [])
      |> assign(:timeline_spikes, [])
+     |> assign(:tl_prev_offset, nil)
+     |> assign(:tl_next_offset, nil)
      |> assign(:stability, initial_stability())
      |> assign(:spike_events, Measurements.count_spike_events())
      |> assign(:deep, %{status: :idle, target: Targets.internet_target()})
@@ -149,16 +151,37 @@ defmodule DropDoctorWeb.DashboardLive do
     {:noreply,
      socket
      |> assign(:timeline_open, true)
-     |> load_timeline(0)}
+     |> load_timeline(0)
+     |> assign_spike_nav()}
   end
 
   def handle_event("close_timeline", _params, socket),
     do: {:noreply, assign(socket, :timeline_open, false)}
 
+  # Hop the window so the previous ("older") / next ("newer") logged spike lands
+  # centred. The reachable target offset for each direction is precomputed in
+  # `assign_spike_nav` (off the drag hot path), so this just replays it — no
+  # re-query. The header chevrons route here via phx-click, the ← / → keys via the
+  # pan hook. A nil target means the arrow was disabled, so this is a no-op.
+  def handle_event("jump_spike", %{"dir" => dir}, socket) do
+    target =
+      if dir == "older", do: socket.assigns.tl_prev_offset, else: socket.assigns.tl_next_offset
+
+    socket = if target, do: socket |> load_timeline(target) |> assign_spike_nav(), else: socket
+    {:noreply, socket}
+  end
+
   # Continuous drag-pan: the hook pushes the absolute target offset (sweeps back
-  # from now) as the cursor moves; `load_timeline` clamps it to the history.
+  # from now) on every cursor-move frame. This is the hot path, so it deliberately
+  # skips the spike-nav queries; the arrows resync on release via `pan_end`.
   def handle_event("pan_to", %{"offset" => offset}, socket) when is_integer(offset) do
     {:noreply, load_timeline(socket, offset)}
+  end
+
+  # Drag released: settle on the final offset and refresh the prev/next-spike
+  # targets for the position we landed on (the per-frame `pan_to` skipped them).
+  def handle_event("pan_end", %{"offset" => offset}, socket) when is_integer(offset) do
+    {:noreply, socket |> load_timeline(offset) |> assign_spike_nav()}
   end
 
   # Relative step-pan (e.g. for keyboard/buttons): +steps scrolls back in time.
@@ -167,7 +190,7 @@ defmodule DropDoctorWeb.DashboardLive do
   end
 
   def handle_event("jump_now", _params, socket),
-    do: {:noreply, load_timeline(socket, 0)}
+    do: {:noreply, socket |> load_timeline(0) |> assign_spike_nav()}
 
   def handle_event("clear_data", _params, socket) do
     deleted = Measurements.reset()
@@ -639,16 +662,25 @@ defmodule DropDoctorWeb.DashboardLive do
                   href="/report"
                   target="_blank"
                   rel="noopener"
-                  class="btn btn-sm tc-btn tc-btn-primary justify-start"
+                  class="btn tc-btn tc-btn-primary justify-start gap-2"
                 >
-                  <.lucide name="file-text" class="size-4" /> Open report (Save as PDF)
+                  <.lucide name="file-text" class="size-4" /> Open the full report
+                  <.lucide name="external-link" class="size-4 opacity-60 ml-auto" />
                 </a>
-                <a href="/report.csv" download class="btn btn-sm tc-btn justify-start">
-                  <.lucide name="download" class="size-4" /> Download CSV
-                </a>
-                <a href="/spikes.csv" download class="btn btn-sm tc-btn justify-start">
-                  <.lucide name="zap" class="size-4" /> Spike log{spike_count_badge(@spike_events)}
-                </a>
+                <p class="text-[0.7rem] opacity-50 leading-snug -mt-0.5 px-1">
+                  Opens in a new tab. Print it and choose “Save as PDF” to email your ISP.
+                </p>
+                <div class="text-[0.7rem] uppercase tracking-wide opacity-40 mt-1 px-1">
+                  Raw data for spreadsheets
+                </div>
+                <div class="flex gap-2">
+                  <a href="/report.csv" download class="btn btn-sm tc-btn justify-start flex-1">
+                    <.lucide name="download" class="size-4" /> Full timeline
+                  </a>
+                  <a href="/spikes.csv" download class="btn btn-sm tc-btn justify-start flex-1">
+                    <.lucide name="zap" class="size-4" /> Spike log{spike_count_badge(@spike_events)}
+                  </a>
+                </div>
                 <button
                   type="button"
                   class="btn btn-sm btn-ghost justify-start text-error/80 hover:text-error hover:bg-error/10"
@@ -753,7 +785,7 @@ defmodule DropDoctorWeb.DashboardLive do
             <h3 class="text-sm font-semibold flex items-center gap-2">
               <.lucide name="activity" class="size-4" /> Timeline — router vs. ISP latency
             </h3>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
               <%= if @tl_offset > 0 do %>
                 <span class="tc-badge text-warning">Viewing past</span>
                 <button type="button" class="btn btn-xs tc-btn" phx-click="jump_now">
@@ -762,6 +794,35 @@ defmodule DropDoctorWeb.DashboardLive do
               <% else %>
                 <span class="tc-badge text-success">● Live</span>
               <% end %>
+              <!-- Spike-hop arrows sit to the right of the Live/Viewing-past block
+                   so the block growing (the "Jump to now" button appearing on the
+                   first hop) never shifts them — they stay a fixed distance from
+                   the close button, so you can keep clicking the same spot. -->
+              <div class="flex items-center gap-1" title="Jump between logged spikes (← →)">
+                <span class="text-[10px] uppercase tracking-wide opacity-40">Spikes</span>
+                <button
+                  type="button"
+                  class="btn btn-xs tc-btn px-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
+                  phx-click="jump_spike"
+                  phx-value-dir="older"
+                  disabled={is_nil(@tl_prev_offset)}
+                  title="Previous spike (←)"
+                  aria-label="Jump to previous spike"
+                >
+                  <.lucide name="chevron-left" class="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-xs tc-btn px-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
+                  phx-click="jump_spike"
+                  phx-value-dir="newer"
+                  disabled={is_nil(@tl_next_offset)}
+                  title="Next spike (→)"
+                  aria-label="Jump to next spike"
+                >
+                  <.lucide name="chevron-right" class="size-3.5" />
+                </button>
+              </div>
               <button
                 type="button"
                 class="opacity-60 hover:opacity-100"
@@ -775,9 +836,12 @@ defmodule DropDoctorWeb.DashboardLive do
           </div>
 
           <p class="tl-muted text-xs opacity-60 max-w-2xl">
-            Each point is one 5-second sweep — newest on the right, older to the left.
+            This is a <strong>moving ~8-minute window onto your whole recorded history</strong>
+            — not just the last few minutes. Each point is one 5-second sweep, newest on the right.
             <strong>Drag right</strong>
-            to scroll back through the past (older events slide in from the left); drag left to return toward now. The amber band is the latency your
+            to scroll back through everything recorded (older events slide in from the left); drag left to
+            return toward now — or use the <strong>← →</strong>
+            arrows above to hop straight to the next logged spike. The amber band is the latency your
             <strong>ISP adds beyond your router</strong>
             — when it swells, the problem is past your equipment. A bump in <em>both</em>
             lines at once is local (your machine or Wi-Fi), not your provider.
@@ -822,7 +886,7 @@ defmodule DropDoctorWeb.DashboardLive do
                   {fmt_time(@tl.first_at)}
                 </span>
               </span>
-              <span>{@tl.n} sweeps · ~{@tl.minutes} min</span>
+              <span>{@tl.n} of {@total_all} sweeps · ~{@tl.minutes}-min window</span>
               <span>
                 <span class="tc-secret" data-utc={utc_iso(@tl.last_at)} data-utc-style="time">
                   {fmt_time(@tl.last_at)}
@@ -895,21 +959,31 @@ defmodule DropDoctorWeb.DashboardLive do
               if (!this.dragging) return
               this.dragging = false
               if (this.raf) { cancelAnimationFrame(this.raf); this.raf = null }
-              // Trailing sync: make sure the exact release position is loaded.
+              // Settle on the exact release position via `pan_end`, which also
+              // refreshes the prev/next-spike arrows for where we landed (the
+              // per-frame `pan_to` skips that query to keep the drag cheap).
               const desired = this.targetOffset()
-              if (desired !== this.lastPushed) {
-                this.lastPushed = desired
-                this.pushEvent("pan_to", { offset: desired })
-              }
+              this.lastPushed = desired
+              this.pushEvent("pan_end", { offset: desired })
               this.dx = 0
               // Settle the sub-step remainder back to the data's true position.
               this.content.style.transition = "transform 0.12s ease-out"
               this.content.style.transform = "translate3d(0,0,0)"
             }
 
+            // ← / → hop between logged spikes (server no-ops if there's none that
+            // way). Only these keys push, so we don't flood the server with every
+            // keystroke; ignoring auto-repeat stops a held key from queuing jumps.
+            this.key = (e) => {
+              if (e.repeat) return
+              if (e.key === "ArrowLeft") { e.preventDefault(); this.pushEvent("jump_spike", { dir: "older" }) }
+              else if (e.key === "ArrowRight") { e.preventDefault(); this.pushEvent("jump_spike", { dir: "newer" }) }
+            }
+
             this.el.addEventListener("pointerdown", this.down)
             window.addEventListener("pointermove", this.move)
             window.addEventListener("pointerup", this.up)
+            window.addEventListener("keydown", this.key)
           },
 
           // Fresh data (new offset/series) arrived from the server: redraw and,
@@ -922,6 +996,7 @@ defmodule DropDoctorWeb.DashboardLive do
           destroyed() {
             window.removeEventListener("pointermove", this.move)
             window.removeEventListener("pointerup", this.up)
+            window.removeEventListener("keydown", this.key)
           },
 
           offset() { return parseInt(this.el.dataset.offset) || 0 },
@@ -1014,6 +1089,52 @@ defmodule DropDoctorWeb.DashboardLive do
     |> assign(:timeline_spikes, window_spikes(rows))
   end
 
+  # Precompute the reachable prev/next spike jump targets for the *current* window.
+  # Called only off the drag hot path (open / release / jump / new sweep), never on
+  # every pan_to frame. Each target is the clamped offset that would centre the
+  # nearest spike beyond that edge, or nil when there's none — or when centring
+  # wouldn't actually move the window (e.g. a spike newer than the newest sweep
+  # clamps back to the live edge). Storing the offset rather than a bare boolean
+  # means the arrow is enabled iff clicking it genuinely moves, and the click just
+  # replays the value — no active-but-inert chevrons, no re-query on jump.
+  defp assign_spike_nav(socket) do
+    {from, to} = window_bounds(socket.assigns.timeline_rows)
+
+    assign(socket,
+      tl_prev_offset: spike_jump_offset(socket, :older, from),
+      tl_next_offset: spike_jump_offset(socket, :newer, to)
+    )
+  end
+
+  defp spike_jump_offset(_socket, _dir, nil), do: nil
+
+  defp spike_jump_offset(socket, dir, edge) do
+    spike =
+      if dir == :older, do: Measurements.spike_before(edge), else: Measurements.spike_after(edge)
+
+    case spike do
+      %{occurred_at: at} ->
+        # Centre the spike: half a window's worth of sweeps sit newer than it.
+        # Clamp identically to `load_timeline` so the "would this move?" test below
+        # matches exactly what the jump will land on.
+        max_off = max(socket.assigns.total_all - @tl_window, 0)
+
+        offset =
+          (Measurements.count_sweeps_after(at) - div(@tl_window, 2)) |> max(0) |> min(max_off)
+
+        if offset == socket.assigns.tl_offset, do: nil, else: offset
+
+      _ ->
+        nil
+    end
+  end
+
+  # The window's {oldest, newest} timestamps. Rows arrive oldest-first, so first is
+  # the older (left) edge and last is the newer (right) edge — the single source of
+  # truth for the edges used by both spike-nav and the spike overlay.
+  defp window_bounds([]), do: {nil, nil}
+  defp window_bounds(rows), do: {tl_at(List.first(rows)), tl_at(List.last(rows))}
+
   # The logged spike/loss events that fall inside the currently-shown window,
   # annotated with their likely source so the timeline can colour them (amber =
   # ISP, muted = local). Pulled from the continuous sampler, not the 5s sweeps —
@@ -1021,8 +1142,7 @@ defmodule DropDoctorWeb.DashboardLive do
   defp window_spikes([]), do: []
 
   defp window_spikes(rows) do
-    from = tl_at(List.first(rows))
-    to = tl_at(List.last(rows))
+    {from, to} = window_bounds(rows)
 
     if from && to do
       # Pad the query by the co-occurrence window so a spike whose cross-segment
@@ -1052,7 +1172,7 @@ defmodule DropDoctorWeb.DashboardLive do
 
   defp refresh_timeline_on_sweep(socket, row) do
     bump = if socket.assigns.tl_offset > 0 and row, do: 1, else: 0
-    load_timeline(socket, socket.assigns.tl_offset + bump)
+    socket |> load_timeline(socket.assigns.tl_offset + bump) |> assign_spike_nav()
   end
 
   # Build everything the timeline SVG needs from the history rows (newest-first
@@ -1248,6 +1368,10 @@ defmodule DropDoctorWeb.DashboardLive do
     do:
       ~S(<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>)
 
+  defp lucide_paths("external-link"),
+    do:
+      ~S(<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6"/>)
+
   defp lucide_paths("monitor"),
     do:
       ~S(<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>)
@@ -1279,6 +1403,8 @@ defmodule DropDoctorWeb.DashboardLive do
   defp lucide_paths("x"), do: ~S(<path d="M18 6 6 18"/><path d="m6 6 12 12"/>)
 
   defp lucide_paths("chevron-down"), do: ~S(<path d="m6 9 6 6 6-6"/>)
+  defp lucide_paths("chevron-left"), do: ~S(<path d="m15 18-6-6 6-6"/>)
+  defp lucide_paths("chevron-right"), do: ~S(<path d="m9 18 6-6-6-6"/>)
 
   defp lucide_paths("trash-2"),
     do:

@@ -735,8 +735,10 @@ defmodule DropDoctor.Report do
     end
   end
 
-  # One honest line: of all the logged spikes, how many were genuinely ISP-side
-  # versus local or a host freeze. Built from the same cross-tagging as the rows.
+  # The honest breakdown: of all the logged spikes, who caused each one? We answer
+  # the only question that matters — was it me, my ISP, or the wider internet — as a
+  # scannable list rather than one dense paragraph, and we hide any bucket that's
+  # empty so a clean category never shows up as a confusing "0 were…".
   defp source_summary(events) do
     %{isp: isp, isp_unconfirmed: one_route, local: local, host_freeze: freeze, total: total} =
       SpikeAnalysis.summarize(events)
@@ -744,19 +746,38 @@ defmodule DropDoctor.Report do
     if total == 0 do
       ""
     else
+      you = local + freeze
+
+      buckets =
+        [
+          {isp, "src-isp", "Your ISP",
+           "confirmed on a second provider's path at the same instant — so the whole provider stumbled, not just one site. These are the ones worth raising with them."},
+          {one_route, "src-isp_unconfirmed", "The wider internet",
+           "only this one route stuttered while a second provider stayed clean — likely a single destination or a peering hop out there, not your ISP as a whole."},
+          {you, "src-local", "Your side — this machine or Wi-Fi", you_detail(freeze)}
+        ]
+        |> Enum.filter(fn {n, _cls, _label, _detail} -> n > 0 end)
+        |> Enum.map_join("", fn {n, cls, label, detail} ->
+          ~s(<li class="#{cls}"><strong>#{n}</strong> <span class="txt">— <b>#{label}.</b> #{detail}</span></li>)
+        end)
+
       """
-      <p class="muted small">Of these, <strong>#{isp}</strong> were confirmed across a second
-      provider's path at the same instant — provider-wide, so genuinely your ISP;
-      <strong>#{one_route}</strong> hit only the one route while a second provider stayed clean
-      (likely a single destination or peering issue, not your whole ISP);
-      <strong>#{local}</strong> coincided with a local-router spike (your machine / Wi-Fi),
-      and <strong>#{freeze}</strong> were multi-second stalls on both segments at once — almost
-      certainly your machine or Wi-Fi briefly freezing, not a network fault.
-      A spike that hits your router and the internet at the same instant can't be your provider:
-      it never left your house.</p>
+      <p class="muted small">Who caused each one? Every spike is checked against a second
+      provider's path and against your own router at the same instant, so we can place the blame:</p>
+      <ul class="source-breakdown">#{buckets}</ul>
       """
     end
   end
+
+  # The "your side" line. When some events were multi-second freezes on both
+  # segments at once we call that out — it's the clearest sign of a local stall.
+  defp you_detail(0),
+    do:
+      ~s(landed on your own router at the same instant, so it never left your house — it can't be your provider.)
+
+  defp you_detail(freeze),
+    do:
+      ~s(landed on your own router at the same instant — including #{freeze} multi-second freeze#{if freeze == 1, do: "", else: "s"} where both segments stalled together. These never left your house, so they can't be your provider.)
 
   defp spike_detail(%{kind: "latency", peak_ms: peak, baseline_ms: base}),
     do: "Latency spiked to #{fmt_ms(peak)} (normal ~#{fmt_ms(base)})"
@@ -1083,6 +1104,16 @@ defmodule DropDoctor.Report do
        reads cooler than a corroborated ISP fault. */
     .src-isp_unconfirmed { color: color-mix(in oklab, var(--warn) 50%, var(--muted)); }
     .src-local, .src-host_freeze { color: var(--muted); }
+    /* The "who caused each spike" breakdown. Each row borrows its accent from the
+       same .src-* colour used on the log chips, so the count + border pick up the
+       category tint while the sentence itself stays readable ink. */
+    ul.source-breakdown { list-style: none; margin: .55rem 0 .2rem; padding: 0; display: grid; gap: .45rem; }
+    ul.source-breakdown li { padding: .5rem .65rem; border-radius: .5rem;
+      border: 1px solid color-mix(in oklab, currentColor 26%, transparent);
+      background: color-mix(in oklab, currentColor 9%, transparent); }
+    ul.source-breakdown li strong { font-size: 1.05rem; font-weight: 800; }
+    ul.source-breakdown li .txt { color: var(--ink); font-size: .88rem; }
+    ul.source-breakdown li .txt b { font-weight: 700; }
     .muted { color: var(--muted); }
     .small { font-size: .82rem; }
     tr.healthy td:first-child { color: var(--ok); font-weight: 800; }
