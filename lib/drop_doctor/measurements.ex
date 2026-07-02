@@ -102,6 +102,46 @@ defmodule DropDoctor.Measurements do
   @doc "Total number of recorded spike events."
   def count_spike_events, do: Repo.aggregate(SpikeEvent, :count)
 
+  @doc """
+  The nearest logged spike strictly *older* than `datetime` (the newest such
+  event), or `nil`. Powers the timeline's "jump to previous spike" arrow.
+  """
+  def spike_before(%DateTime{} = datetime) do
+    SpikeEvent
+    |> where([e], e.occurred_at < ^datetime)
+    |> order_by(desc: :occurred_at)
+    |> limit(1)
+    |> Repo.one()
+  end
+
+  def spike_before(_), do: nil
+
+  @doc """
+  The nearest logged spike strictly *newer* than `datetime` (the oldest such
+  event), or `nil`. Powers the timeline's "jump to next spike" arrow.
+  """
+  def spike_after(%DateTime{} = datetime) do
+    SpikeEvent
+    |> where([e], e.occurred_at > ^datetime)
+    |> order_by(asc: :occurred_at)
+    |> limit(1)
+    |> Repo.one()
+  end
+
+  def spike_after(_), do: nil
+
+  @doc """
+  How many sweeps were recorded strictly after `datetime`. Maps a spike's
+  timestamp back to a pan offset so the timeline can centre it in view.
+  """
+  def count_sweeps_after(%DateTime{} = datetime) do
+    Sweep
+    |> where([s], s.inserted_at > ^datetime)
+    |> Repo.aggregate(:count)
+  end
+
+  def count_sweeps_after(_), do: 0
+
   # --- speed tests --------------------------------------------------------
 
   @doc """
